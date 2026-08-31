@@ -367,7 +367,6 @@ export function FactoryLoadHome() {
   const selModels        = inline?.selModels ?? EMPTY_SET
   const selAreas         = inline?.selAreas ?? EMPTY_SET
   const selWorkstations  = inline?.selWorkstations ?? EMPTY_SET
-  const gcrRows          = inline?.gcrRows ?? null
   const selYears         = inline?.selYears ?? EMPTY_SET
   const selQuarters      = inline?.selQuarters ?? EMPTY_SET
   const selMonths        = inline?.selMonths ?? EMPTY_SET
@@ -666,32 +665,8 @@ export function FactoryLoadHome() {
   // Modelo → Loco, and rendering an expandable card onto an empty one would be a chevron that
   // opens nothing.
   //
-  // FILTERS: the DATE selections only. Ano/Trimestre/Mês/Semana are fiscal-calendar keys the
-  // plan states for itself, so they mean the same thing on both sides. Modelo, Área and
-  // Workstation are NOT applied: those option lists are derived from the Schedule's own
-  // vocabulary, which a published plan is not described in — matching against them could only
-  // ever zero this card, never filter it.
-  //
-  // No dates on the card either. The plan is keyed by fiscal WEEK, not by day; turning a
-  // 4-4-5 week into an Início/Fim date would be inventing precision the plan never had.
-  const gcrNode = useMemo<TypeNode | null>(() => {
-    if (!gcrRows?.length) return null
-    let hours = 0
-    for (const r of gcrRows) {
-      const monthKey = `${r.year}-${String(r.month).padStart(2, '0')}`
-      if (selYears.size    > 0 && !selYears.has(String(r.year)))            continue
-      if (selQuarters.size > 0 && !selQuarters.has(monthKeyQuarter(monthKey))) continue
-      if (selMonths.size   > 0 && !selMonths.has(monthKey))                 continue
-      if (selFws.size      > 0 && !selFws.has(r.fw))                        continue
-      hours += Number(r.hhTotal) || 0
-    }
-    if (hours <= 0) return null
-    return { key: 'gcr', label: TYPE_LABELS.gcr ?? 'GCR', startIso: '', finishIso: '', hours, actual: 0, models: [] }
-  }, [gcrRows, selYears, selQuarters, selMonths, selFws])
 
-  // Appended, never sorted in: the Tipo order is by earliest start date and GCR has none.
-  const sections = useMemo<TypeNode[]>(
-    () => (gcrNode ? [...merged, gcrNode] : merged), [merged, gcrNode])
+  const sections = useMemo<TypeNode[]>(() => merged, [merged])
 
   // ── Expand/collapse state per level ──────────────────────────────────────────
   const [expTypes,  setExpTypes]  = useState<Set<string>>(new Set())
@@ -720,7 +695,7 @@ export function FactoryLoadHome() {
   // The GCR fetch counts as loading too: for a GCR-ONLY selection the Schedule side finishes
   // immediately with nothing in it, so without this the page showed "Nenhuma locomotiva" until
   // the plan landed — an empty-state message for data that was still on its way.
-  const loadingContent = inline.summaryComputing || !inline.summaryTestData || inline.gcrLoading
+  const loadingContent = inline.summaryComputing || !inline.summaryTestData 
 
   const rowBase: React.CSSProperties = {
     display: 'flex', alignItems: 'center', gap: 8, width: '100%',

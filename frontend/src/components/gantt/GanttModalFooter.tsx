@@ -7,8 +7,6 @@ import { getMergeLocoTypes, setMergeLocoTypes, subscribeMergeLocoTypes } from '@
 import { COMPARE_LINE } from './SummaryAreaChart'
 import type { GanttData } from '@/lib/api'
 import type { SummaryTestResult } from './types'
-import type { GetsaPlannedTabHandle } from '../GetsaPlannedTab'
-import type { PlanoMensalTabHandle } from '../PlanoMensalTab'
 import { useConflictWs } from './useConflictWs'
 import { ConflictWsModal } from './ConflictWsModal'
 import { usePermissions } from '@/context/PermissionsContext'
@@ -218,15 +216,7 @@ interface GanttModalFooterProps {
   onceBuiltRef: React.MutableRefObject<(() => void) | null>
   showExportMenu: boolean
   setShowExportMenu: (fn: (v: boolean) => boolean) => void
-  showGetsaExportMenu: boolean
-  setShowGetsaExportMenu: (fn: (v: boolean) => boolean) => void
-  showPlanoExportMenu: boolean
-  setShowPlanoExportMenu: (fn: (v: boolean) => boolean) => void
   exportMenuRef: React.RefObject<HTMLDivElement | null>
-  getsaExportMenuRef: React.RefObject<HTMLDivElement | null>
-  planoExportMenuRef: React.RefObject<HTMLDivElement | null>
-  getsaTabRef: React.RefObject<GetsaPlannedTabHandle | null>
-  planoTabRef: React.RefObject<PlanoMensalTabHandle | null>
   handleExport: () => void
   handleExportSummary: (level: 'area' | 'subarea' | 'itens' | 'tipo' | 'modelo' | 'loco') => void
   /** Active Resumo Geral hierarchy: 'area' → Área/Subárea/Itens, 'locos' → Tipo/Modelo/Loco. */
@@ -291,13 +281,7 @@ export function GanttModalFooter({
   zoom, zoomBusy, setZoom, setZoomBusy,
   onceBuiltRef,
   showExportMenu, setShowExportMenu,
-  showGetsaExportMenu, setShowGetsaExportMenu,
-  showPlanoExportMenu, setShowPlanoExportMenu,
   exportMenuRef,
-  getsaExportMenuRef,
-  planoExportMenuRef,
-  getsaTabRef,
-  planoTabRef,
   handleExport,
   handleExportSummary,
   summaryRowMode,
@@ -1062,58 +1046,6 @@ export function GanttModalFooter({
                     {opt.label}
                   </button>
                 ))}
-              </div>
-            )}
-          </div>
-        ) : activeTab === 1 ? (
-          <div className="relative" ref={getsaExportMenuRef}>
-            <button
-              onClick={() => setShowGetsaExportMenu(v => !v)}
-              disabled={!summaryTestData}
-              title="Exportar GETSA Planned para Excel"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded border font-medium transition-colors hover:bg-gray-100 disabled:opacity-40"
-              style={{ borderColor: RED + 'AA', color: RED }}
-            >
-              <Download size={12} />
-              Exportar
-              <ChevronDown size={11} style={{ marginLeft: 1, transform: showGetsaExportMenu ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }} />
-            </button>
-            {showGetsaExportMenu && (
-              <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden min-w-[130px]">
-                <button onClick={() => { getsaTabRef.current?.exportToExcel(); setShowGetsaExportMenu(() => false) }}
-                  className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50 transition-colors" style={{ color: RED }}>
-                  Área Atual
-                </button>
-                <button onClick={() => { getsaTabRef.current?.exportAllToExcel(); setShowGetsaExportMenu(() => false) }}
-                  className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50 transition-colors" style={{ color: RED }}>
-                  Todas as Áreas
-                </button>
-              </div>
-            )}
-          </div>
-        ) : activeTab === 2 ? (
-          <div className="relative" ref={planoExportMenuRef}>
-            <button
-              onClick={() => setShowPlanoExportMenu(v => !v)}
-              disabled={!summaryTestData || !effectiveData}
-              title="Exportar Plano de Produção para Excel"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded border font-medium transition-colors hover:bg-gray-100 disabled:opacity-40"
-              style={{ borderColor: RED + 'AA', color: RED }}
-            >
-              <Download size={12} />
-              Exportar
-              <ChevronDown size={11} style={{ marginLeft: 1, transform: showPlanoExportMenu ? 'rotate(0deg)' : 'rotate(-90deg)', transition: 'transform .15s' }} />
-            </button>
-            {showPlanoExportMenu && (
-              <div className="absolute right-0 bottom-full mb-1 bg-white border border-gray-200 rounded-lg shadow-lg z-50 overflow-hidden min-w-[130px]">
-                <button onClick={() => { planoTabRef.current?.exportToExcel(); setShowPlanoExportMenu(() => false) }}
-                  className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50 transition-colors" style={{ color: RED }}>
-                  Área Atual
-                </button>
-                <button onClick={() => { planoTabRef.current?.exportAllToExcel(); setShowPlanoExportMenu(() => false) }}
-                  className="w-full px-3 py-2 text-left text-xs hover:bg-gray-50 transition-colors" style={{ color: RED }}>
-                  Todas as Áreas
-                </button>
               </div>
             )}
           </div>

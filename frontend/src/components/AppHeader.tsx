@@ -28,9 +28,6 @@ import type { ImportItem, OptimizationResult, PersonResultRow } from '@/lib/api'
 import { getWsnPeople, getPeriodDays } from '@/lib/api'
 import { SaveLoadModal }         from '@/components/SaveLoadModal'
 import { encryptSession, readSessionFile } from '@/lib/sessionCrypto'
-import { ExcelModal }            from '@/components/ExcelModal'
-import { DbDatasetModal }        from '@/components/DbDatasetModal'
-import { ImportProgressFloat }   from '@/components/ImportProgressFloat'
 import { GanttModal, GanttLaunchModal } from '@/components/GanttModal'
 import { AppErrorBoundary }       from '@/components/AppErrorBoundary'
 import { FilterBox } from '@/components/gantt/FilterBox'
@@ -47,17 +44,9 @@ import { useGanttInlineMaybe } from '@/context/GanttInlineContext'
 import { useFactoryLoadShare, useFactoryLoadPublisherId } from '@/context/FactoryLoadShareContext'
 import { APP_NAMES } from '@/lib/appNames'
 import { usePermissions } from '@/context/PermissionsContext'
-import { ManageUsersModal } from '@/components/ManageUsersModal'
-import { ManageCalendarModal } from '@/components/ManageCalendarModal'
-import { ServerControlModal } from '@/components/ServerControlModal'
 import { ChangePasswordModal } from '@/components/ChangePasswordModal'
-import { ManageHeadcountModal } from '@/components/ManageHeadcountModal'
-import { AdminAlertsBell } from '@/components/AdminAlertsBell'
-import { OnlineUsersBadge } from '@/components/OnlineUsersBadge'
 import { ContextMenu, type CtxMenuItem } from '@/components/OptimizationResultsModal/ContextMenu'
 import { Users, Plus, Clock, ClipboardList, Power, KeyRound } from 'lucide-react'
-import { TransactedHoursModal } from '@/components/TransactedHoursModal'
-import { PlanoServicosGcrModal } from '@/components/PlanoServicosGcrModal'
 
 // ── Session serialization helpers ────────────────────────────────────────────
 // Sets aren't JSON-serializable, so filters/override sets round-trip through arrays.
@@ -902,17 +891,11 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   // Avatar circle tint by permission level (same palette as Manage Users):
   // Reader → grey, Editor → amber, Admin → red. Initials stay unchanged.
   const roleBadgeColor = role === 'admin' ? '#D32F2F' : role === 'editor' ? '#D97706' : '#9CA3AF'
-  const [showManageUsers, setShowManageUsers] = useState(false)
-  const [showManageCalendar, setShowManageCalendar] = useState(false)
-  const [showServerControl, setShowServerControl] = useState(false)
   const [showChangePw, setShowChangePw] = useState(false)
-  const [showManageHeadcount, setShowManageHeadcount] = useState(false)
   const [userMenu, setUserMenu] = useState<{ x: number; y: number } | null>(null)
   // "+" extras menu beside the avatar (Editor+). Kept separate from `userMenu` so the
   // avatar's own right-click menu keeps its admin-only item set unchanged.
   const [plusMenu, setPlusMenu] = useState<{ x: number; y: number } | null>(null)
-  const [showTransactedHours, setShowTransactedHours] = useState(false)
-  const [showPlanoServicosGcr, setShowPlanoServicosGcr] = useState(false)
 
   // Opening this screen costs nothing and writes nothing: it reads the stored snapshot's
   // status and, on demand, queries Denodo with the user's OWN credentials. So no password
@@ -921,12 +904,6 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   // authorizes the WRITE, and it is joined there by the admin second factor on the save
   // endpoint. Reaching the screen has never been permission to save, and now it does not
   // pretend to be.
-  function openTransactedHours() {
-    // Belt-and-braces: the menu item is already disabled without a loaded period, but the
-    // modal has no date picker to fall back on, so opening it unscoped would be meaningless.
-    if (!transactedHoursReady) return
-    setShowTransactedHours(true)
-  }
 
   const [showImport,        setShowImport]        = useState(false)
   // Which data source the simulation modal (ImportModal) reads from: the monthly plan
@@ -1028,32 +1005,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   // GanttModal) gates on this value rather than on the raw toggle.
   const scheduleActive = scheduleEnabled && anyScheduleBacked(ganttSelLineTypes)
 
-  // Contents of the "+" menu, scoped to the current app. Both entries are Editor+; the
-  // outer render already checks canImport, so nothing here re-tests the role.
-  const plusMenuItems: CtxMenuItem[] = [
-    ...(mode === 'gantt' ? [{
-      label: 'Horas Transacionadas',
-      icon: <Clock size={14} />,
-      disabled: !transactedHoursReady,
-      title: transactedHoursReady
-        ? 'Carregar horas transacionadas do Denodo para o período carregado'
-        : 'Carregue um período e ao menos um Tipo na aba principal para habilitar.',
-      onClick: () => openTransactedHours(),
-    }, {
-      // Reads local Excel files only — no Denodo, no database, nothing persisted — so it
-      // needs neither a loaded period nor the ADMIN second factor that gates the entry
-      // above. Editor+ (already checked on the "+" button) is the whole gate.
-      label: 'Plano de Serviços - GCR',
-      icon: <ClipboardList size={14} />,
-      title: 'Carregar as planilhas ForecastGCR e HorasGCR',
-      onClick: () => setShowPlanoServicosGcr(true),
-    }] : []),
-    ...(mode === 'analise' ? [{
-      label: 'Editar Headcount',
-      icon: <Factory size={14} />,
-      onClick: () => setShowManageHeadcount(true),
-    }] : []),
-  ]
+  const plusMenuItems: CtxMenuItem[] = []
 
   // ── "Carga de Fábrica" as a Simular source ───────────────────────────────────
   // Feeds ImportModal from the loaded schedule instead of /api/excel-items. The dataset is the
@@ -1069,33 +1021,22 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   const factoryLoadShare = useFactoryLoadShare()
   const factoryLoadPublishId = useFactoryLoadPublisherId()
   const factoryLoadPublish = factoryLoadShare.publish
-  // The published GCR plan rides along with the dataset. Taken from GanttInlineContext, which
-  // already loads it for the Carga de Fábrica main page and only when 'gcr' is in the Tipo
-  // selection — so this adds no fetch and cannot offer a plan the user did not load. Null in
-  // the Capacity instance (no provider there), which is correct: that header publishes nothing.
-  const ganttInlineGcrRows = ganttInline?.gcrRows ?? null
   useEffect(() => {
     factoryLoadPublish(factoryLoadPublishId, {
       data: ganttOpenedOnce ? ganttActiveData : null,
       dateRange: ganttDateRange,
       lineFilter: ganttLineFilter,
-      gcrRows: ganttOpenedOnce ? ganttInlineGcrRows : null,
     })
   }, [factoryLoadPublish, factoryLoadPublishId, ganttOpenedOnce, ganttActiveData, ganttDateRange,
-      ganttLineFilter, ganttInlineGcrRows])
+      ganttLineFilter])
 
   const factoryLoadData = useMemo(
     () => windowGanttData(factoryLoadShare.data, factoryLoadShare.dateRange, factoryLoadShare.lineFilter),
     [factoryLoadShare.data, factoryLoadShare.dateRange, factoryLoadShare.lineFilter],
   )
-  // The plan is NOT windowed like the Schedule dataset above: `windowGanttData` narrows by
-  // period and LINHA, and a published plan has neither — its rows are keyed by fiscal week and
-  // área. Filtering it through the launch scope would silently drop every week outside the
-  // loaded window, which is exactly the failure the row-level period fallback fixes.
-  const factoryLoadGcrRows = factoryLoadShare.gcrRows
   const factoryLoadLoader = useMemo(
-    () => makeFactoryLoadLoader(factoryLoadData, factoryLoadGcrRows),
-    [factoryLoadData, factoryLoadGcrRows],
+    () => makeFactoryLoadLoader(factoryLoadData),
+    [factoryLoadData],
   )
   // Ready = a período is loaded AND the Gantt was opened at least once — the publisher only
   // sends `data` when both hold, so this single check covers both. Its items ARE that período's
@@ -2120,14 +2061,6 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
         <div className="flex items-center gap-0.5">
           <NavBtn icon={<RotateCcw size={16} />} label="Resetar" tooltip={assemblyLoading ? 'Carregando dados... aguarde' : 'Recarregar planilha'} disabled={assemblyLoading} tone="red" onClick={askResetar} />
           <NavBtn icon={<Save size={16} />} label="Salvar" tooltip={assemblyLoading ? 'Carregando dados... aguarde' : 'Salvar/carregar sessão'} disabled={assemblyLoading} tone="red" onClick={() => setShowSaveLoad(true)} />
-          {/* Editor+ only, and the role can land a beat after the header paints — so it fades in
-              instead of popping into the middle of a settled row of buttons. `inline-flex` keeps
-              the wrapper the button's own box inside this flex row. */}
-          {canImport && (
-            <Reveal className="inline-flex">
-              <NavBtn icon={<Database size={16} className="text-[#D97706]" />} label="Database" tooltip={assemblyLoading ? 'Carregando dados... aguarde' : 'Banco de dados'} disabled={assemblyLoading} tone="amber" onClick={() => setShowExcel(true)} />
-            </Reveal>
-          )}
         </div>
 
         <Sep />
@@ -2165,9 +2098,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                 </span>
               </div>
               {/* Admin-only notification indicator (unacknowledged security events). */}
-              {canManageUsers && <AdminAlertsBell />}
               {/* Admin-only online-users indicator (top-right of the avatar, opposite the alerts badge). */}
-              {canManageUsers && <OnlineUsersBadge />}
               {/* Extra functionalities ("+"), Editor+ only. Pinned to the avatar's BOTTOM-right,
                   directly under OnlineUsersBadge (-top-1.5 -right-1.5) and sharing its exact
                   geometry — 14px circle, slate-500, white glyph, white ring + shadow, hover
@@ -2303,7 +2234,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
           source={importSource}
           sourceLoader={importSource === 'factoryLoad' ? factoryLoadLoader : undefined}
           sourceScope={importSource === 'factoryLoad'
-            ? factoryLoadScope(factoryLoadData, factoryLoadGcrRows)
+            ? factoryLoadScope(factoryLoadData)
             : undefined}
           onImport={handleImport}
           onClose={() => setShowImport(false)}
@@ -2367,22 +2298,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
         />
       )}
 
-      {showExcel && canImport && (
-        <ExcelModal
-          onClose={() => { setShowExcel(false); setExcelInitialDb(undefined) }}
-          onOpenViewer={(key) => { setDbViewerInitial(key); setShowDbViewer(true) }}
-          initialDb={excelInitialDb}
-          allowedDbs={importDbScope}
-        />
-      )}
 
-      {showDbViewer && canImport && (
-        <DbDatasetModal
-          allowedDbs={importDbScope}
-          initialDb={dbViewerInitial}
-          onClose={() => { setShowDbViewer(false); setDbViewerInitial(undefined) }}
-        />
-      )}
 
       {/* Avatar right-click menu. Deixou de ser exclusivo de admin porque ganhou uma entrada
           que é de TODO usuário: "Alterar Senha". Com o login local, quem entra pela primeira
@@ -2400,23 +2316,6 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
               icon: <KeyRound size={14} />,
               onClick: () => setShowChangePw(true),
             }] : []),
-            ...(canManageUsers ? [
-              {
-                label: 'Gerenciar Usuários',
-                icon: <Users size={14} />,
-                onClick: () => setShowManageUsers(true),
-              },
-              {
-                label: 'Gerenciar Calendário',
-                icon: <CalendarDays size={14} />,
-                onClick: () => setShowManageCalendar(true),
-              },
-              {
-                label: 'Controle do Servidor',
-                icon: <Power size={14} />,
-                onClick: () => setShowServerControl(true),
-              },
-            ] : []),
           ]}
           onClose={() => setUserMenu(null)}
         />
@@ -2441,47 +2340,16 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
         />
       )}
 
-      {showTransactedHours && canImport && mode === 'gantt' && transactedHoursReady && (
-        <TransactedHoursModal
-          onClose={() => setShowTransactedHours(false)}
-          loadedFrom={ganttLastDateFrom}
-          loadedTo={ganttLastDateTo}
-          // Both sides of this cross the tree through GanttInlineContext: the page publishes
-          // which locos it renders, and receives back the prévia's rollup to display before
-          // anything is written.
-          locos={ganttInline?.mainLocoNames ?? EMPTY_LOCO_SCOPE}
-          onRollup={r => ganttInline?.setPendingRollup(r)}
-        />
-      )}
 
-      {showPlanoServicosGcr && canImport && mode === 'gantt' && (
-        <PlanoServicosGcrModal onClose={() => setShowPlanoServicosGcr(false)} />
-      )}
 
-      {showManageUsers && canManageUsers && (
-        <ManageUsersModal onClose={() => setShowManageUsers(false)} />
-      )}
 
-      {showManageCalendar && canManageUsers && (
-        <ManageCalendarModal onClose={() => setShowManageCalendar(false)} />
-      )}
 
-      {showServerControl && canManageUsers && (
-        <ServerControlModal onClose={() => setShowServerControl(false)} />
-      )}
 
       {showChangePw && currentUser && (
         <ChangePasswordModal onClose={() => setShowChangePw(false)} />
       )}
 
-      {showManageHeadcount && canShowHeadcountMenu && (
-        <ManageHeadcountModal onClose={() => setShowManageHeadcount(false)} />
-      )}
 
-      <ImportProgressFloat
-        allowedDbs={importDbScope}
-        onOpenModal={(dbKey) => { setExcelInitialDb(dbKey); setShowExcel(true) }}
-      />
 
       {showGanttLaunch && (
         <GanttLaunchModal

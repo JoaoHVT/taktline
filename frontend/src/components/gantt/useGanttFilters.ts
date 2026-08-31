@@ -2,8 +2,6 @@ import { useMemo } from 'react'
 import type { GanttData, GanttDateInfo, GanttGroup } from '@/lib/api'
 import { isoFw445MonthKey, monthKeyQuarter } from '@/lib/ganttUtils'
 import { TIPOS, tipoOfLinha } from '@/lib/tipos'
-import type { GcrPlanWeek } from '@/lib/gcrPlan'
-import { contributesToSummary, gcrAreaOf, gcrModelOf, gcrWorkstationOf } from '@/lib/gcrSummaryMerge'
 
 // Both of these now come from the Tipo registry (`lib/tipos.ts`) — they are re-exported here
 // rather than moved, because a dozen modules import them from this path and the indirection
@@ -35,7 +33,6 @@ export function useGanttFilters({
   selSchedModels,
   selSchedAreas,
   selSchedWorkstations,
-  gcrRows,
 }: {
   effectiveData: GanttData | null
   summaryTestReady: boolean
@@ -54,28 +51,7 @@ export function useGanttFilters({
   selSchedModels?: Set<string>
   selSchedAreas?: Set<string>
   selSchedWorkstations?: Set<string>
-  /**
-   * The published GCR plan, when the GCR Tipo is selected — already null whenever it is not,
-   * so nothing here has to re-check the Tipo.
-   *
-   * WHY THE OPTION LISTS NEED IT. GCR hours are not in `GanttData.groups`: they are folded into
-   * the rollup afterwards (`lib/gcrSummaryMerge`). So a filter list built from `groups` alone
-   * describes only half of what Resumo Geral is showing — a GCR-only área was not offered at
-   * all, and in a GCR-ONLY load (no Schedule at all) the Área and Workstation lists were empty
-   * while the table below them was full.
-   *
-   * Only the RESUMO GERAL lists take it. The `allSched*` lists stay Schedule-vocabulary: they
-   * drive the Schedule tab's own panel, which has no GCR rows to filter and would be offering
-   * options that select nothing.
-   */
-  gcrRows?: GcrPlanWeek[] | null
 }) {
-  /** GCR rows that actually reach the rollup — the same test the merge applies, so the lists
-   *  never offer a value no visible row carries. */
-  const gcrContributing = useMemo(
-    () => (gcrRows ?? []).filter(contributesToSummary),
-    [gcrRows],
-  )
   const years = useMemo(() => {
     if (!summaryTestReady || !effectiveData) return []
     const s = new Set<string>()
@@ -143,9 +119,8 @@ export function useGanttFilters({
     }
     // A área both sources name adds ONE option, not two: `gcrAreaOf` trims exactly as the
     // Schedule branch above does, and the merge files the hours under that same string.
-    for (const r of gcrContributing) s.add(gcrAreaOf(r))
     return [...s].sort()
-  }, [effectiveData, summaryLineTypes, gcrContributing])
+  }, [effectiveData, summaryLineTypes])
 
   const allModels = useMemo(() => {
     const totalTypes = Object.keys(SUMMARY_LINE_TYPE_MAP).length
@@ -162,9 +137,8 @@ export function useGanttFilters({
     }
     // The plan's WORKORDER is the same kind of identifier as the Schedule's `wo`, which is what
     // this list holds. Blank ones are skipped, exactly as a group without a `wo` is.
-    for (const r of gcrContributing) { const m = gcrModelOf(r); if (m) s.add(m) }
     return [...s].sort()
-  }, [effectiveData, summaryLineTypes, gcrContributing])
+  }, [effectiveData, summaryLineTypes])
 
   const allLocoNames = useMemo(() => {
     if (!effectiveData) return []
@@ -204,11 +178,9 @@ export function useGanttFilters({
    * one axis that did not have it yet.
    */
   const allSummaryWorkstations = useMemo(() => {
-    if (gcrContributing.length === 0) return allWorkstations
     const s = new Set<string>(allWorkstations)
-    for (const r of gcrContributing) s.add(gcrWorkstationOf(r))
     return [...s].sort()
-  }, [allWorkstations, gcrContributing])
+  }, [allWorkstations])
 
   const availableLineTypes = useMemo(() => {
     if (!effectiveData) return new Set<string>()

@@ -1,8 +1,6 @@
 'use client'
 import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown, Loader2, RefreshCw, Save, RotateCcw, Lock, History } from 'lucide-react'
-import { GetsaPlannedTab, type GetsaPlannedTabHandle, type GetsaSessionState } from './GetsaPlannedTab'
-import { PlanoMensalTab, type PlanoMensalTabHandle } from './PlanoMensalTab'
 import { ConfirmDialog } from './ConfirmDialog'
 import { getGanttData, exportGanttView, optimizeGanttConflictsStreaming, swapWs } from '@/lib/api'
 import type { GanttData, LocoEdit, OptScopeFilter } from '@/lib/api'
@@ -45,9 +43,6 @@ import { Pencil, CalendarPlus, CalendarMinus, AlertTriangle, ArrowLeftRight, Plu
 import * as XLSX from 'xlsx'
 import { RED, RED_DK, monthLabel, computeConflictCounts, validTakt, locoTypeOf, isOverlapAllowedPair, windowGanttData, wsSubLabel, localTodayIso } from '@/lib/ganttUtils'
 import { TIPOS, DEFAULT_TIPO_KEY, anyScheduleBacked } from '@/lib/tipos'
-import { mergeGcrIntoSummary, filterGcrRows, type GcrMergeAxis, type GcrFilterSelection } from '@/lib/gcrSummaryMerge'
-import { loadGcrSummary, takePrimedGcrSummary } from '@/lib/gcrSummaryLoad'
-import type { GcrPlanWeek } from '@/lib/gcrPlan'
 import { GanttTable, type GanttTableHandle, type WsExpandState, type GanttFreezeGeom } from './gantt/GanttTable'
 import { ResumoGeralTab } from './gantt/ResumoGeralTab'
 import { GanttModalFooter } from './gantt/GanttModalFooter'
@@ -240,7 +235,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   const [error,           setError]         = useState<string | null>(null)
   const [exporting,       setExporting]     = useState(false)
   const [activeTab,       setActiveTab]     = useState<0 | 1 | 2 | 3>(initialTab)
-  const [getsaTabReady,   setGetsaTabReady] = useState(false)
   const [zoom,            setZoom]          = useState(1)
   const [scheduleGateMsg, setScheduleGateMsg] = useState<string | null>(null)
   const [summaryTestReady,  setSummaryTestReady]  = useState(false)
@@ -251,18 +245,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   const [selMonths,   setSelMonths]   = useState<Set<string>>(new Set())
   const [selFws,      setSelFws]      = useState<Set<string>>(new Set())
   const [showExportMenu,       setShowExportMenu]       = useState(false)
-  const [showGetsaExportMenu,  setShowGetsaExportMenu]  = useState(false)
-  const [showPlanoExportMenu,  setShowPlanoExportMenu]  = useState(false)
   const exportMenuRef      = useRef<HTMLDivElement>(null)
-  const getsaExportMenuRef = useRef<HTMLDivElement>(null)
-  const planoExportMenuRef = useRef<HTMLDivElement>(null)
-  const getsaTabRef        = useRef<GetsaPlannedTabHandle>(null)
-  // GETSA Planned is mounted only while its tab is active (the tree is heavy), so its edit
-  // state has to live OUTSIDE the component or every tab switch would discard the user's
-  // work. This ref is that home: the tab seeds from it on mount and mirrors into it on
-  // change, so edits persist for as long as the Gantt is open.
-  const getsaSessionRef    = useRef<GetsaSessionState | null>(null)
-  const planoTabRef        = useRef<PlanoMensalTabHandle>(null)
   const resumoScrollRef    = useRef<HTMLDivElement>(null)
   const planoScrollRef     = useRef<HTMLDivElement>(null)
   const [summaryMode,   setSummaryMode]   = useState<'ue' | 'horas'>('horas')
@@ -366,104 +349,8 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   const [locoSearch, setLocoSearch] = useState('')
   // Kits planning window (New Locos only) — opened from the Schedule footer.
 
-  // RAW = what the Schedule produced. `summaryTestData` below is this with the published GCR
-  // plan folded in when the GCR Tipo is selected; every consumer reads that one, so the merge
-  // happens in exactly one place instead of at each of the twenty read sites.
-  const [summaryTestDataRaw, setSummaryTestData] = useState<SummaryTestResult | null>(null)
+  const [summaryTestData, setSummaryTestData] = useState<SummaryTestResult | null>(null)
 
-  // ── The GCR Tipo: fetch on SELECT, never automatically ──────────────────────
-  //
-  // GCR contributes only when it is picked, exactly like the other four Tipos. A published
-  // plan sitting in the database does NOT quietly enter every rollup: a Tipo that appears in
-  // the totals without having been chosen is hours the user cannot account for, and it would
-  // contradict the chip that exists to choose it.
-  //
-  // Two fetches, both conditional on that selection:
-  //   1. the plan itself;
-  //   2. a calendar AXIS for it. GCR weeks can fall outside the Schedule's loaded window — or
-  //      there may be no Schedule at all, when GCR is the only Tipo selected — and every
-  //      business-day figure in the rollup is otherwise derived from the Schedule's own
-  //      date_info. Without this, a GCR-only load has no axis and renders empty.
-  //
-  // DESELECTION IS A DERIVATION, NOT A STATE RESET. The fetched rows stay in state and the
-  // exposed `gcrRows` below is gated on the selection instead. Clearing them from inside the
-  // effect would be a synchronous setState in an effect body — a cascading render on every
-  // toggle — and it would also make deselect/reselect refetch a plan that has not changed.
-  const gcrSelected = summaryLineTypes.has('gcr')
-  const EMPTY_AXIS: GcrMergeAxis = useMemo(() => ({ monthBusinessDays: {}, fwBusinessDays: {} }), [])
-  const [gcrRowsRaw, setGcrRows] = useState<GcrPlanWeek[] | null>(null)
-  const [gcrAxisRaw, setGcrAxis] = useState<GcrMergeAxis>({ monthBusinessDays: {}, fwBusinessDays: {} })
-  const [gcrErrorRaw, setGcrError] = useState<string | null>(null)
-
-  // What the rest of the component sees. Nothing GCR-shaped exists while the Tipo is not
-  // selected — no rows to merge, no axis, no status in the header.
-  const gcrRows  = gcrSelected ? gcrRowsRaw : null
-  const gcrAxis  = gcrSelected ? gcrAxisRaw : EMPTY_AXIS
-  const gcrError = gcrSelected ? gcrErrorRaw : null
-  // DERIVED, not a fourth piece of state: "selected, and neither the rows nor a reason for
-  // their absence has arrived yet" is exactly what in-flight means here, and holding it
-  // separately would have meant a synchronous setState in the effect body below.
-  const gcrLoading = gcrSelected && gcrRowsRaw === null && gcrErrorRaw === null
-
-  useEffect(() => {
-    // Not selected → no fetch, and nothing is touched. Already fetched → keep it: the published
-    // plan does not change under a session that is only toggling a chip.
-    // Also stops after a failure: gcrErrorRaw is set, gcrRowsRaw stays null, and neither dep
-    // changes — so this does not retry in a loop against a backend that just refused.
-    if (!gcrSelected || gcrRowsRaw !== null || gcrErrorRaw !== null) return
-    let alive = true
-    // The launch screen starts this fetch itself for a GCR-only load (there is no Schedule
-    // preload to hold the locomotive band up for one), so take what it already has in flight
-    // rather than asking the backend for the same plan a second time. Nothing primed — the
-    // usual case, a Tipo toggled from inside the modal — falls through to a fresh load.
-    void (takePrimedGcrSummary() ?? loadGcrSummary()).then(res => {
-      if (!alive) return
-      setGcrRows(res.rows)
-      setGcrAxis(res.axis)
-      setGcrError(res.error)
-    })
-    return () => { alive = false }
-    // gcrErrorRaw is a dep because the guard reads it. Re-running on it is harmless and is in
-    // fact the point: the run that set it immediately returns at the guard.
-  }, [gcrSelected, gcrRowsRaw, gcrErrorRaw])
-
-  /** ── The Resumo Geral filters, applied to the GCR side ────────────────────────────────────
-   *
-   *  The Schedule side is filtered inside `useSummaryCompute`, before anything is aggregated.
-   *  GCR is folded in AFTER that, so without this it arrived unfiltered: selecting one Área
-   *  narrowed the Schedule and left every GCR área in the total, and a Mês selection moved the
-   *  Schedule's columns while GCR kept contributing to all of them. The rollup then disagreed
-   *  with the filter chips above it in a way that reads as wrong numbers, not as a filter bug.
-   *
-   *  Two versions, for the same reason the tab computes two Schedule rollups: the CHART (and the
-   *  statistics panel beside it) deliberately ignores the month selection so the distribution
-   *  keeps its full timeline while the tables react. Filtering GCR by month for the chart would
-   *  put a gap in exactly the series that is supposed to span everything.
-   *
-   *  `filterGcrRows` returns the same array when nothing is dropped, so an unfiltered session
-   *  keeps every downstream memo identity it had before. */
-  const gcrFilterSel = useMemo<GcrFilterSelection>(() => ({
-    years: selYears, quarters: selQuarters, months: selMonths, fws: selFws,
-    areas: selAreas, workstations: selWorkstations, models: selModels, locoNames: selLocoNames,
-  }), [selYears, selQuarters, selMonths, selFws, selAreas, selWorkstations, selModels, selLocoNames])
-
-  const gcrFilterSelChart = useMemo<GcrFilterSelection>(
-    () => ({ ...gcrFilterSel, months: undefined }),
-    [gcrFilterSel],
-  )
-
-  const gcrRowsFiltered      = useMemo(() => filterGcrRows(gcrRows, gcrFilterSel),      [gcrRows, gcrFilterSel])
-  const gcrRowsFilteredChart = useMemo(() => filterGcrRows(gcrRows, gcrFilterSelChart), [gcrRows, gcrFilterSelChart])
-
-  /** The rollup every consumer reads: the Schedule's, with GCR folded in when selected.
-   *
-   *  Gated on the FILTERED rows' length and not on `gcrSelected`, so selecting GCR with nothing
-   *  published — or with nothing that survives the current filters — changes nothing at all
-   *  rather than replacing the result with a synthesized empty one. */
-  const summaryTestData = useMemo(
-    () => (gcrRowsFiltered?.length ? mergeGcrIntoSummary(summaryTestDataRaw, gcrRowsFiltered, gcrAxis) : summaryTestDataRaw),
-    [summaryTestDataRaw, gcrRowsFiltered, gcrAxis],
-  )
 
   const [summaryComputing, setSummaryComputing] = useState(false)
   const [stats, setStats] = useState<StatsResult | null>(null)
@@ -473,22 +360,8 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   // Resumo Geral distribution chart summaries — computed IGNORING the month selection so the
   // chart always shows the full timeline while KPIs/tables react to the selected month. One
   // for the active scenario, one for the compared scenario (comparison mode only).
-  // RAW, for the same reason as summaryTestDataRaw: the GCR plan is folded into the derived
-  // `chartSummaryData` below. The distribution chart AND the whole statistics panel beside it
-  // (limite superior/inferior, desvios, variância, desvio padrão, CV) are computed from this
-  // one series — see ResumoGeralTab's `chartPoints` — so leaving it unmerged is what made a
-  // GCR selection change the tables and the KPI cards while the chart and every statistic
-  // beside it stayed on the Schedule's numbers alone.
-  const [chartSummaryDataRaw, setChartSummaryData] = useState<SummaryTestResult | null>(null)
+  const [chartSummaryData, setChartSummaryData] = useState<SummaryTestResult | null>(null)
   const [chartComparisonSummary, setChartComparisonSummary] = useState<SummaryTestResult | null>(null)
-  /** The chart/statistics rollup, with GCR folded in on exactly the same terms as
-   *  `summaryTestData`. Same helper, same gate (`gcrRows?.length`), so the chart and the tables
-   *  cannot end up disagreeing about what is in the total — which is the one thing this panel
-   *  must never do, since the "Média" line it draws is the same mean the KPI cards report. */
-  const chartSummaryData = useMemo(
-    () => (gcrRowsFilteredChart?.length ? mergeGcrIntoSummary(chartSummaryDataRaw, gcrRowsFilteredChart, gcrAxis) : chartSummaryDataRaw),
-    [chartSummaryDataRaw, gcrRowsFilteredChart, gcrAxis],
-  )
   // Single-scenario deviation reference (NOT the scenario-compare above): the ACTIVE mode's
   // reference schedule (planoBaseSource) aggregated under the same filters, so Resumo Geral shows
   // each cell's deviation vs Padrão→original / Original→itself / Projeção→frozen baseline. One
@@ -497,41 +370,10 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   const [refSummary, setRefSummary] = useState<SummaryTestResult | null>(null)
   const [refChartSummary, setRefChartSummary] = useState<SummaryTestResult | null>(null)
 
-  /** ── GCR on the REFERENCE side of every comparison ────────────────────────────────────────
-   *
-   *  Every compare on this tab measures the displayed rollup against a reference rollup, and the
-   *  displayed one has GCR folded into it (`summaryTestData` / `chartSummaryData`). The four
-   *  reference rollups below are aggregated from SCHEDULE data alone, so a mixed selection put
-   *  GCR hours on one side of the subtraction and nothing on the other: every GCR área, linha and
-   *  item read as +100% "new work", and the phantom-row/grand-total logic followed them.
-   *
-   *  It is not a comparison anyone asked for. A published GCR plan has no reference version — no
-   *  base scenario, no frozen projection, no other scenario — because it is a plan, not a
-   *  schedule, and nothing on this screen can edit it. So the SAME rows are folded into the
-   *  reference with the same helper: identical on both sides, which subtracts to exactly zero and
-   *  is the truth about work that cannot deviate. (The alternative — tagging GCR rows and
-   *  teaching each of the six consumers to skip them — states the same fact six times.)
-   *
-   *  Only when a reference actually exists: merging into `null` would ARM a comparison that is
-   *  not armed. And `ResumoGeralTab` still drops a reference whose total is zero, which is the
-   *  GCR-ONLY case (no Schedule hours on either side) and stays exactly as it was.
-   *
-   *  Each side takes the SAME filtered rows its displayed counterpart took — the month-filtered
-   *  set for the tables, the month-independent one for the chart — because a reference built
-   *  from a different subset would subtract to a difference the filters invented.
-   */
-  const withGcr = useCallback(
-    (s: SummaryTestResult | null) => (s && gcrRowsFiltered?.length ? mergeGcrIntoSummary(s, gcrRowsFiltered, gcrAxis) : s),
-    [gcrRowsFiltered, gcrAxis],
-  )
-  const withGcrChart = useCallback(
-    (s: SummaryTestResult | null) => (s && gcrRowsFilteredChart?.length ? mergeGcrIntoSummary(s, gcrRowsFilteredChart, gcrAxis) : s),
-    [gcrRowsFilteredChart, gcrAxis],
-  )
-  const refSummaryCmp            = useMemo(() => withGcr(refSummary),            [withGcr, refSummary])
-  const refChartSummaryCmp       = useMemo(() => withGcrChart(refChartSummary),  [withGcrChart, refChartSummary])
-  const comparisonOtherSummaryCmp = useMemo(() => withGcr(comparisonOtherSummary), [withGcr, comparisonOtherSummary])
-  const chartComparisonSummaryCmp = useMemo(() => withGcrChart(chartComparisonSummary), [withGcrChart, chartComparisonSummary])
+  const refSummaryCmp             = refSummary
+  const refChartSummaryCmp        = refChartSummary
+  const comparisonOtherSummaryCmp = comparisonOtherSummary
+  const chartComparisonSummaryCmp = chartComparisonSummary
   // UI-only toggle for the ±5% comparison arrows (default ON). Persists while the modal is open.
   const [showCompareArrows, setShowCompareArrows] = useState(true)
 
@@ -3075,16 +2917,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     const h = (e: MouseEvent) => { if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) setShowExportMenu(false) }
     document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
   }, [showExportMenu])
-  useEffect(() => {
-    if (!showGetsaExportMenu) return
-    const h = (e: MouseEvent) => { if (getsaExportMenuRef.current && !getsaExportMenuRef.current.contains(e.target as Node)) setShowGetsaExportMenu(false) }
-    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
-  }, [showGetsaExportMenu])
-  useEffect(() => {
-    if (!showPlanoExportMenu) return
-    const h = (e: MouseEvent) => { if (planoExportMenuRef.current && !planoExportMenuRef.current.contains(e.target as Node)) setShowPlanoExportMenu(false) }
-    document.addEventListener('mousedown', h); return () => document.removeEventListener('mousedown', h)
-  }, [showPlanoExportMenu])
 
   // Base schedule with the scenario's registered working Saturdays applied (is_weekend→false), so those
   // columns join the axis and baked WS40/WS50 work sits on them. A live optimize already carries its own
@@ -3931,8 +3763,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
         setLoadedLineTypes(new Set(keys))
       }
       if (startTab === 0) setSummaryTestReady(true)
-      else if (startTab === 1) { setSummaryTestReady(true); setGetsaTabReady(true) }
-      else if (startTab === 2) setSummaryTestReady(true)
+      
       else setScheduleTabReady(true)
     }
     prevVisibleRef.current = visible
@@ -3985,7 +3816,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     setLocoSearch('')
   }, [summaryLineTypes])
 
-  const TABS = ['Resumo Geral', 'GETSA Planned', 'Plano de Produção', 'Schedule Geral'] as const
+  const TABS = [{ i: 0, name: 'Resumo Geral' }, { i: 3, name: 'Schedule Geral' }] as const
 
   async function load(silent = false, userRefresh = false) {
     if (!silent) { setLoading(true); setError(null) }
@@ -4236,10 +4067,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     effectiveData, summaryTestReady, selYears, selQuarters, selMonths, selFws,
     selAreas, selModels, selLocoNames, summaryLineTypes,
     selSchedModels, selSchedAreas, selSchedWorkstations,
-    // UNFILTERED on purpose: an option list narrowed by the selection made from it can only
-    // shrink to whatever is already selected, and a value the user deselects would vanish
-    // instead of becoming selectable again.
-    gcrRows,
   })
 
   // Comparison-mode summary cache: keyed by active scenario ('base'/'target') + the
@@ -4363,7 +4190,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     if (tab === 3 && !scheduleAvailable) onScheduleEnabledChange?.(true)
     startTabTransition(() => {
       if (tab === 0) setSummaryTestReady(true)
-      if (tab === 1) { setSummaryTestReady(true); setGetsaTabReady(true) }
       if (tab === 2) setSummaryTestReady(true)
       if (tab === 3) setScheduleTabReady(true)
       setActiveTab(tab)
@@ -4438,24 +4264,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                   ? `${summaryTestData.modelsCount} modelos · ${summaryTestData.businessDaysCount} dias úteis`
                   : `${stats!.businessDays} dias úteis`
                 }
-              </span>
-            )}
-            {/* GCR's own state, and ONLY when the Tipo is selected. Its hours arrive from a
-                different place than everything else in this header, so "is it in yet, and did
-                it work" has to be answerable without opening a tab and counting. */}
-            {gcrSelected && (
-              <span
-                className="text-[11px] leading-tight flex items-center gap-1"
-                style={{ color: gcrError ? '#FCA5A5' : 'rgba(255,255,255,0.72)' }}
-                title={gcrError ?? (gcrRows
-                  ? `${gcrRows.length.toLocaleString('pt-BR')} linha(s) do plano GCR publicado`
-                  : undefined)}
-              >
-                {gcrLoading
-                  ? <><Loader2 size={10} className="animate-spin" /> GCR…</>
-                  : gcrError
-                    ? <><AlertTriangle size={10} /> GCR</>
-                    : `· GCR ${(gcrRows?.length ?? 0).toLocaleString('pt-BR')} linhas`}
               </span>
             )}
           </div>
@@ -4586,7 +4394,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
           >
             <ChevronLeft size={14} />
           </button>
-          {TABS.map((name, i) => {
+          {TABS.map(({ i, name }) => {
             const active = activeTab === i
             // DISABLED when the loaded Tipos have no Schedule at all (GCR alone): there is
             // nothing a click could load, so it must not navigate anywhere.
@@ -4680,7 +4488,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                      Schedule aggregation uses, rather than getting an indicator of its own: from
                      the reader's side both are "the numbers on this screen are not ready yet",
                      and a GCR-only load previously sat on a blank tab with nothing spinning. */
-                  summaryComputing={summaryComputing || gcrLoading}
+                  summaryComputing={summaryComputing}
                   summaryTestData={summaryTestData}
                   comparisonSummary={comparisonMode ? comparisonOtherSummaryCmp : refSummaryCmp}
                   chartSummaryData={chartSummaryData}
@@ -4733,10 +4541,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                   handleWsClick={handleWsClick}
                   ganttBuiltRef={ganttBuiltRef}
                   hiddenScheduleLocos={hiddenScheduleLocos}
-                  buildPlanData={summarySource}
-                  buildPlanOtherData={comparisonOtherEffective}
-                  buildPlanFullData={unwindowedForPlan}
-                  buildPlanOtherFullData={comparisonOtherUnwindowed}
                   comparisonMode={comparisonMode}
                   comparisonActive={comparisonActive}
                   comparisonBaseName={comparisonBaseName}
@@ -4744,50 +4548,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                   scenarioName={scenarioName}
                   onSwitchScenario={onComparisonSwitch}
                 />
-                )}
-              </div>
-
-              {/* ─── Aba 1: GETSA Planned ─── */}
-              <div style={{ position: 'absolute', inset: 0, overflowY: 'auto', opacity: activeTab === 1 && !isTabTransitioning ? 1 : (activeTab === 1 ? 0.4 : 0), pointerEvents: activeTab === 1 ? 'auto' : 'none', transition: 'opacity 0.15s', display: activeTab === 1 ? undefined : 'none' }}>
-                {activeTab === 1 && getsaTabReady && summaryTestData && (
-                  <GetsaPlannedTab ref={getsaTabRef} summaryData={summaryTestData} RED={RED} sessionRef={getsaSessionRef} />
-                )}
-                {getsaTabReady && !summaryTestData && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8 }}>
-                    <Loader2 size={20} className="animate-spin" style={{ color: RED }} />
-                    <span style={{ fontSize: 13, color: '#9CA3AF' }}>Aguardando dados…</span>
-                  </div>
-                )}
-              </div>
-
-              {/* ─── Aba 2: Plano Mensal ─── */}
-              <div
-                ref={planoScrollRef}
-                tabIndex={0}
-                style={{ outline: 'none', position: 'absolute', inset: 0, overflowY: 'auto', opacity: activeTab === 2 && !isTabTransitioning ? 1 : (activeTab === 2 ? 0.4 : 0), pointerEvents: activeTab === 2 ? 'auto' : 'none', transition: 'opacity 0.15s', display: activeTab === 2 ? undefined : 'none' }}
-                onTransitionEnd={() => { if (activeTab === 2) planoScrollRef.current?.focus({ preventScroll: true }) }}
-                onFocusCapture={(e) => {
-                  // Same rule as the Resumo tab: never steal focus from an interactive control —
-                  // this is what made the Plano's PN search unfocusable/untypeable.
-                  const t = e.target as HTMLElement
-                  if (t === e.currentTarget) return
-                  if (t.closest('input, textarea, select, button, [contenteditable="true"]')) return
-                  ;(e.currentTarget as HTMLDivElement).focus({ preventScroll: true })
-                }}
-              >
-                {/* Mounted whenever the data is ready — NOT gated on `activeTab === 2` — so the
-                    Plano's filters (Ano/Mês/FW, column funnels, Área) and view state survive leaving
-                    and returning to the tab (item 7). The wrapper div hides it with display:none when
-                    inactive; it still unmounts when the modal closes. `active` lets the tab reset its
-                    session column widths when the user leaves it (item 6). */}
-                {summaryTestReady && summaryTestData && summarySource && (
-                  <PlanoMensalTab ref={planoTabRef} data={summarySource} baseData={planoBaseSource} summaryData={summaryTestData} RED={RED} overrides={locoOverrides} active={activeTab === 2} gcrRows={gcrRows} />
-                )}
-                {summaryTestReady && (!summaryTestData || !effectiveData) && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, gap: 8 }}>
-                    <Loader2 size={20} className="animate-spin" style={{ color: RED }} />
-                    <span style={{ fontSize: 13, color: '#9CA3AF' }}>Aguardando dados…</span>
-                  </div>
                 )}
               </div>
 
@@ -4929,15 +4689,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
           onceBuiltRef={onceBuiltRef}
           showExportMenu={showExportMenu}
           setShowExportMenu={setShowExportMenu}
-          showGetsaExportMenu={showGetsaExportMenu}
-          setShowGetsaExportMenu={setShowGetsaExportMenu}
-          showPlanoExportMenu={showPlanoExportMenu}
-          setShowPlanoExportMenu={setShowPlanoExportMenu}
           exportMenuRef={exportMenuRef}
-          getsaExportMenuRef={getsaExportMenuRef}
-          planoExportMenuRef={planoExportMenuRef}
-          getsaTabRef={getsaTabRef}
-          planoTabRef={planoTabRef}
           handleExport={handleExport}
           handleExportSummary={handleExportSummary}
           summaryRowMode={rowMode}

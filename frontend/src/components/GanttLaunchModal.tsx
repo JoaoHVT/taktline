@@ -6,7 +6,6 @@ import type { GanttData } from '@/lib/api'
 import { getToken, refreshToken } from '@/lib/tokenStore'
 import { LocomotiveProgress, LINE_TYPE_COLORS } from './gantt/LocomotiveProgress'
 import { TIPOS, TIPO_KEYS, TIPO_NO_SCHEDULE_NOTE, DEFAULT_TIPO_KEY, anyScheduleBacked } from '@/lib/tipos'
-import { primeGcrSummary } from '@/lib/gcrSummaryLoad'
 import { SUMMARY_LINE_TYPE_MAP } from './gantt/useGanttFilters'
 import { useFileDrop } from '@/lib/useFileDrop'
 import { checkUploadSize } from '@/lib/uploadLimits'
@@ -410,16 +409,13 @@ export function GanttLaunchModal({
     // behind an already-open modal, with nothing spinning. Start it now, in PARALLEL with the
     // Gantt data, and hold the band until it lands. `primeGcrSummary` parks the promise for the
     // modal to take, so waiting here costs no second request.
-    const gcrPrimed = selLineTypes.has('gcr') ? primeGcrSummary() : null
     // Wait on it only when nothing else already does. With the Schedule module on, the offscreen
     // build holds the band for far longer than this fetch and the plan lands inside that wait —
     // blocking on it first would only push the build back by the plan's own load time.
-    const gcrPending = scheduleOn ? null : gcrPrimed
 
     if (scenarioData) {
       setLoadProgress(60)
       await new Promise<void>(r => setTimeout(r, 80))
-      if (gcrPending) await gcrPending
       setLoadProgress(100)
       onOpen(tab, dateFrom || undefined, dateTo || undefined, lineFilter, scenarioData, scenarioName)
       await new Promise<void>(r => setTimeout(r, 200))
@@ -431,7 +427,6 @@ export function GanttLaunchModal({
     if (resolved) {
       setLoadProgress(55)
       await new Promise<void>(r => setTimeout(r, 80))
-      if (gcrPending) await gcrPending
       setLoadProgress(100)
       onOpen(tab, dateFrom || undefined, dateTo || undefined, lineFilter, undefined, undefined)
       await new Promise<void>(r => setTimeout(r, 200))
@@ -442,7 +437,6 @@ export function GanttLaunchModal({
       const d = await getGanttData()
       _ganttDataFetchedAt = Date.now()
       onDataLoaded?.(d)
-      if (gcrPending) await gcrPending
       setLoadProgress(100)
       onOpen(tab, dateFrom || undefined, dateTo || undefined, lineFilter, undefined, undefined)
       setTimeout(() => setLoadingFor(null), 200)

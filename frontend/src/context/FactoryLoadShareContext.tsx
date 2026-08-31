@@ -33,7 +33,6 @@
 import { createContext, useCallback, useContext, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import type { GanttData } from '@/lib/api'
-import type { GcrPlanWeek } from '@/lib/gcrPlan'
 
 export interface FactoryLoadSnapshot {
   /** Active raw dataset (base or scenario, or the active comparison side). null = nothing
@@ -50,7 +49,6 @@ export interface FactoryLoadSnapshot {
    *  the Capacity import has to receive both or it lists a subset of what the user is looking
    *  at. NOT windowed by `dateRange`/`lineFilter` — those describe the Schedule's period and
    *  lines, and a published plan is described in neither. */
-  gcrRows: GcrPlanWeek[] | null
 }
 
 /** Opaque per-publisher identity. Each AppHeader instance holds one for its whole lifetime. */
@@ -60,7 +58,7 @@ interface FactoryLoadShareState extends FactoryLoadSnapshot {
   publish: (id: FactoryLoadPublisherId, snap: FactoryLoadSnapshot) => void
 }
 
-const EMPTY: FactoryLoadSnapshot = { data: null, dateRange: null, lineFilter: null, gcrRows: null }
+const EMPTY: FactoryLoadSnapshot = { data: null, dateRange: null, lineFilter: null }
 
 const Ctx = createContext<FactoryLoadShareState | null>(null)
 
@@ -93,7 +91,6 @@ export function FactoryLoadShareProvider({ children }: { children: React.ReactNo
       && prev.lineFilter === next.lineFilter
       // The plan arrives on its own clock — it is fetched after the dataset — so a snapshot
       // identical in every other field is still a NEW one once its rows land.
-      && prev.gcrRows === next.gcrRows
     ) ? prev : next)
   }, [])
 

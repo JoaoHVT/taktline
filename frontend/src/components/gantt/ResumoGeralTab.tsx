@@ -10,7 +10,6 @@ import { SummaryAreaChart } from './SummaryAreaChart'
 import type { SummaryTestResult, SummaryAreaRow, PnRow, LocoRow, ModelGroup } from './types'
 import { locoKeyOf, isEmptyOverride, shiftIsoByBusinessDays, type LocoOverrideMap } from '@/lib/locoOverrides'
 import { getMergeLocoTypes, subscribeMergeLocoTypes, mergeSummaryLocoTypes } from '@/lib/locoMerge'
-import { BuildPlanModal } from '../BuildPlanModal'
 import type { GanttData } from '@/lib/api'
 
 /** Small red warning icon shown beside Takt when a LOCO has conflicts (icon only). */
@@ -278,18 +277,11 @@ interface ResumoGeralTabProps {
    *  filters). Clicking such a loco must NOT navigate — there is no row to scroll to. null =
    *  the filter is off (every loco navigates normally). */
   hiddenScheduleLocos?: Set<string> | null
-  /** The loaded Schedule, for the Build Plan window only (it reads start_ms / finish_ms / takt
-   *  straight off the groups — none of the summary aggregates carry those). Omit/null and the
-   *  button is not rendered, because it would open on nothing. */
-  buildPlanData?: GanttData | null
   /** The COMPARED scenario's schedule, for the Build Plan window's Δ table. Already in memory in
    *  comparison mode (GanttModal windows both), so this costs nothing to pass. */
-  buildPlanOtherData?: GanttData | null
   /** The two above WITHOUT the period window (line filter still applied). Pure passthrough to the
    *  Build Plan window's kit planner, whose Min floor is horizon-aware and needs to see the demand
    *  beyond the loaded window — nothing here reads them. */
-  buildPlanFullData?: GanttData | null
-  buildPlanOtherFullData?: GanttData | null
   /** Comparison-mode passthrough for that window: which scenario the numbers belong to, which side
    *  it is (the Δ is always Target − Base), the two names, and how to switch — so both scenarios'
    *  build plans can be read without leaving it. */
@@ -324,10 +316,6 @@ export function ResumoGeralTab({
   locoOverrides,
   ganttBuiltRef,
   hiddenScheduleLocos = null,
-  buildPlanData = null,
-  buildPlanOtherData = null,
-  buildPlanFullData = null,
-  buildPlanOtherFullData = null,
   comparisonMode = false,
   comparisonActive = 'base',
   comparisonBaseName,
@@ -337,7 +325,6 @@ export function ResumoGeralTab({
 }: ResumoGeralTabProps) {
   // Build Plan window — reads the Schedule directly and holds no state this tab depends on, so
   // opening or closing it cannot disturb anything here.
-  const [buildOpen, setBuildOpen] = useState(false)
   // ── "Unir locos" (optional) ────────────────────────────────────────────────
   // One physical serial planned under two Tipos (`ES442227` + `B3#ES442227`) folds into a
   // single entry under the Tipo with the most total hours. Applied HERE, at display time, and
@@ -1114,46 +1101,6 @@ export function ResumoGeralTab({
             </div>
           )}
             </div>
-            {/* ── Build Plan — the row's primary action, sitting between Exibição and the chart ──
-                Deliberately the loudest control in this row (filled red, bigger type, its own
-                shadow): everything to its left narrows THIS view, while this opens another one.
-                It takes whatever horizontal space the row has left (`flex: 1` on the wrapper, full
-                width on the button) so it grows with the window instead of leaving a dead gap
-                between the filter chips and the chart. */}
-            {/* ALWAYS rendered when a dataset exists — never conditionally removed. The window
-                reads the Schedule (start_ms / finish_ms / takt / kit FWs), so a selection with no
-                Schedule behind it has nothing for it to show; but a button that DISAPPEARS for
-                that selection reads as a broken layout, and hunting for it is worse than being
-                told why it is off. So it stays put, disabled, and says so. */}
-            {buildPlanData && (() => {
-              const buildPlanUsable = anyScheduleBacked(summaryLineTypes)
-              return (
-              <div style={{ flex: '1 1 auto', minWidth: 132, display: 'flex' }}>
-                <button
-                  onClick={() => { if (buildPlanUsable) setBuildOpen(true) }}
-                  disabled={!buildPlanUsable}
-                  title={buildPlanUsable
-                    ? 'Abrir o Build Plan — início, fim, duração e takt de cada loco, as FWs de kit/start/FGI, e o Build Schedule por mês ou semana'
-                    : 'O Build Plan é montado a partir do schedule das locomotivas. Os Tipos selecionados não possuem schedule.'}
-                  style={{
-                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, width: '100%',
-                    padding: '7px 14px', borderRadius: 9,
-                    border: `1.5px solid ${buildPlanUsable ? RED : '#E5E7EB'}`,
-                    background: buildPlanUsable ? RED : '#F3F4F6',
-                    color: buildPlanUsable ? '#fff' : '#9CA3AF', fontSize: 12.5, fontWeight: 800,
-                    letterSpacing: '0.02em', whiteSpace: 'nowrap',
-                    cursor: buildPlanUsable ? 'pointer' : 'not-allowed',
-                    boxShadow: buildPlanUsable ? '0 1px 3px rgba(211,47,47,0.35)' : 'none',
-                    transition: 'background 0.15s',
-                  }}
-                  onMouseEnter={e => { if (buildPlanUsable) (e.currentTarget as HTMLElement).style.background = '#B71C1C' }}
-                  onMouseLeave={e => { if (buildPlanUsable) (e.currentTarget as HTMLElement).style.background = RED }}
-                >
-                  <Hammer size={14} /> Build Plan
-                </button>
-              </div>
-              )
-            })()}
             {/* "Unir locos" is NOT here: it lives in the modal footer beside Exportar (see
                 GanttModalFooter), where the export it also governs sits. */}
           </div>
@@ -1868,26 +1815,6 @@ export function ResumoGeralTab({
         )
       })()}
 
-      {/* Build Plan — its own window (KitsModal shell), fed straight from the loaded Schedule. */}
-      {buildOpen && buildPlanData && (
-        <BuildPlanModal
-          data={buildPlanData}
-          otherData={comparisonMode ? buildPlanOtherData : null}
-          planData={buildPlanFullData}
-          otherPlanData={comparisonMode ? buildPlanOtherFullData : null}
-          RED={RED}
-          onClose={() => setBuildOpen(false)}
-          comparisonMode={comparisonMode}
-          comparisonActive={comparisonActive}
-          comparisonBaseName={comparisonBaseName}
-          comparisonTargetName={comparisonTargetName}
-          // Outside comparison mode there is still a scenario to name — that window's footer says
-          // which one the numbers belong to, exactly as it does with two of them. Undefined = no
-          // scenario loaded (the base data), and then there is nothing to name.
-          scenarioName={scenarioName}
-          onSwitchScenario={comparisonMode ? onSwitchScenario : undefined}
-        />
-      )}
     </div>
   )
 }

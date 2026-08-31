@@ -101,9 +101,8 @@
  */
 import { getExcelItems } from '@/lib/api'
 import { fwToMonth445 } from '@/lib/ganttUtils'
-import { buildPlanoRows, gcrRowToPlano, type PlanoRow } from '@/components/PlanoMensalTab'
+import { buildPlanoRows, type PlanoRow } from '@/lib/planoRows'
 import { orgOfTipo } from '@/lib/tipos'
-import type { GcrPlanWeek } from '@/lib/gcrPlan'
 import type { GanttData, ImportItem, ImportFilterOptions, ExcelItemsParams, ExcelItemsResponse } from '@/lib/api'
 
 const U = (v: unknown) => String(v ?? '').trim().toUpperCase()
@@ -289,15 +288,6 @@ export interface FactoryLoadCoverage {
   unroutedItems: number
   routedHours: number
   unroutedHours: number
-  /** The same split over the GCR half alone. An item fed by BOTH sources counts here too —
-   *  its hours are split by which rows contributed them, never double counted. */
-  gcrItems: number
-  gcrUnroutedItems: number
-  gcrHours: number
-  gcrUnroutedHours: number
-  /** Áreas carrying unrouted GCR hours, largest first — the actionable part: it names WHICH
-   *  part of the routing master is missing rather than reporting a bare total. */
-  gcrUnroutedAreas: { area: string; hours: number }[]
 }
 
 export interface FactoryLoadResult extends ExcelItemsResponse {
@@ -330,7 +320,6 @@ export interface FactoryLoadResult extends ExcelItemsResponse {
  *  never the day cells. */
 export function factoryLoadScope(
   data: GanttData | null,
-  gcrRows: GcrPlanWeek[] | null = null,
 ): FactoryLoadResult['scope'] {
   if (!data) return { areas: [], linhas: [], fws: [], from: '', to: '' }
   const areas = new Set<string>()
@@ -344,17 +333,6 @@ export function factoryLoadScope(
   }
   const isos = data.date_info.map(d => d.iso).filter(Boolean).sort()
   const fws = [...new Set(data.date_info.map(d => normalizeFw(d.fw)).filter(Boolean))]
-  // The GCR plan's own áreas and weeks. They belong in the scope because they are genuinely in
-  // the list below it — the plan reaches áreas no Schedule line works in (WGS & Transit, Labs)
-  // and weeks outside the loaded window. The ISO BOUNDS are deliberately left alone: a plan row
-  // has a fiscal week and a fiscal month, never a calendar date, so there is nothing of its own
-  // to widen them with and inventing one would misstate the period.
-  for (const g of (gcrRows ?? [])) {
-    const a = String(g.area ?? '').trim()
-    if (a) areas.add(a)
-    const fw = normalizeFw(g.fw)
-    if (fw && !fws.includes(fw)) fws.push(fw)
-  }
   return {
     areas:  [...areas].sort(),
     linhas: [...linhas].sort(),
@@ -379,10 +357,9 @@ export function buildFactoryLoadItems(
   data: GanttData,
   catalog: Map<string, ImportItem>,
   params: ExcelItemsParams = {},
-  gcrRows: GcrPlanWeek[] | null = null,
 ): FactoryLoadResult {
   const cal = cachedCalendar(data)
-  const { all: rows } = cachedRows(data, gcrRows)
+  const { all: rows } = cachedRows(data)
   const { itemFw, optionFw } = makeFwFilters(params)
 
   // One output item per ASSEMBLY, matching /api/excel-items which aggregates by `item`.
@@ -395,8 +372,6 @@ export function buildFactoryLoadItems(
   const hoursByItem = new Map<string, number>()
   const resolved = new Set<string>()
   const unresolved = new Set<string>()
-  /** Which output items carry GCR rows, and how many of their plan hours came from them. */
-  const gcrHoursByItem = new Map<string, number>()
   /**
    * Whether each output item has a ROUTING, decided the same way the hours request resolves
    * one: the code exists in the routing master's ASSEMBLY column (`has_routing` off the
@@ -411,8 +386,6 @@ export function buildFactoryLoadItems(
    * item (it is still the routing handle downstream); it is just not the coverage signal.
    */
   const routedByItem = new Map<string, boolean>()
-  /** Unrouted GCR hours by área — the part that names what the routing master is missing. */
-  const gcrUnroutedByArea = new Map<string, number>()
 
   // Filter options come from `optionFw` (year only) — NOT from the rows that survived the
   // month/FW filter. See makeFwFilters: deriving them from the surviving rows makes the month
@@ -489,13 +462,6 @@ export function buildFactoryLoadItems(
         qtde_fw:   0,
         source:    'simular',
       })
-    } else if (row.tipo === 'gcr') {
-      // An ASSEMBLY can be fed by BOTH sources — a Schedule line and the published plan can
-      // build the same part. The output is ONE item and can carry only one org, and the plan
-      // wins: work that came through the GCR plan is GCR work whatever Schedule Tipo also
-      // reaches this assembly. Without this the org would be decided by whichever row was
-      // walked first, which is row order, not a rule.
-      items.get(key)!.cliente = cliente
     }
     // Routed once ⇒ routed. An assembly reached by several rows only needs ONE of them to
     // have resolved through the catalog for its operations to exist.
@@ -513,21 +479,11 @@ export function buildFactoryLoadItems(
     // instead of reading as zero everywhere.
     hoursByItem.set(key, (hoursByItem.get(key) ?? 0) + (Number.isFinite(row.hhTotal) ? row.hhTotal : 0))
 
-    // Coverage bookkeeping — the GCR half only, since that is the half whose routing the
-    // catalog does not cover. Attributed by ROW, so an assembly fed by both sources reports
-    // exactly the hours each one contributed.
-    if (row.gcr) {
-      const hh = Number.isFinite(row.hhTotal) ? row.hhTotal : 0
-      gcrHoursByItem.set(key, (gcrHoursByItem.get(key) ?? 0) + hh)
-      if (!rowRouted) gcrUnroutedByArea.set(rowArea, (gcrUnroutedByArea.get(rowArea) ?? 0) + hh)
-    }
   }
 
   const out: ImportItem[] = []
   const coverage: FactoryLoadCoverage = {
     routedItems: 0, unroutedItems: 0, routedHours: 0, unroutedHours: 0,
-    gcrItems: 0, gcrUnroutedItems: 0, gcrHours: 0, gcrUnroutedHours: 0,
-    gcrUnroutedAreas: [],
   }
   for (const [key, it] of items) {
     // QTDE FW is SUMMED across the fiscal weeks in range — a part built over three weeks
@@ -537,16 +493,10 @@ export function buildFactoryLoadItems(
     // see `splitQty`.
     const { qty, tipoQty } = splitQty(qtyByItemFwTipo.get(key))
     const hh = hoursByItem.get(key) ?? 0
-    const gcrHh = gcrHoursByItem.get(key) ?? 0
     // Routing existence by ASSEMBLY — the key the hours request resolves by. See routedByItem.
     const routed = routedByItem.get(key) ?? false
     if (routed) { coverage.routedItems++;   coverage.routedHours   += hh }
     else        { coverage.unroutedItems++; coverage.unroutedHours += hh }
-    if (gcrHoursByItem.has(key)) {
-      coverage.gcrItems++
-      coverage.gcrHours += gcrHh
-      if (!routed) { coverage.gcrUnroutedItems++; coverage.gcrUnroutedHours += gcrHh }
-    }
     out.push({
       ...it,
       tipo_fw: [...(tipoFwByItem.get(key) ?? [])].sort(),
@@ -591,13 +541,8 @@ export function buildFactoryLoadItems(
     items: out,
     unresolvedPns: [...unresolved].sort(),
     resolvedPns: [...resolved].sort(),
-    coverage: {
-      ...coverage,
-      gcrUnroutedAreas: [...gcrUnroutedByArea.entries()]
-        .map(([area, hours]) => ({ area: area || '(sem área)', hours }))
-        .sort((a, b) => b.hours - a.hours),
-    },
-    scope: factoryLoadScope(data, gcrRows),
+    coverage,
+    scope: factoryLoadScope(data),
   }
 }
 
@@ -605,20 +550,12 @@ export function buildFactoryLoadItems(
 // `buildPlanoRows` walks every group × workstation × desc-row × work-order × day, so it must
 // not re-run on each filter change. Keyed by dataset IDENTITY (the windowed GanttData object),
 // which is exactly how the Plano de Produção grid memoises its own call.
-// Keyed on BOTH inputs: the published plan is its own object and can arrive (or be deselected)
-// without the Schedule dataset moving, so a data-only key served the previous row set.
-let _rowsKey: { data: GanttData; gcr: GcrPlanWeek[] | null } | null = null
+let _rowsKey: GanttData | null = null
 let _rowsVal: ReturnType<typeof buildPlanoRows> | null = null
-function cachedRows(data: GanttData, gcrRows: GcrPlanWeek[] | null) {
-  if (!_rowsVal || _rowsKey?.data !== data || _rowsKey?.gcr !== gcrRows) {
-    const built = buildPlanoRows(data, fwOrderFrom(data))
-    // `gcrRowToPlano` and nothing else — the same converter Plano de Produção appends with, so
-    // the grid and this list cannot describe one plan row two different ways. Only `all` is
-    // extended: `byArea` is unused here, and building a second index nobody reads is waste.
-    _rowsVal = gcrRows?.length
-      ? { ...built, all: [...built.all, ...gcrRows.map(gcrRowToPlano)] }
-      : built
-    _rowsKey = { data, gcr: gcrRows }
+function cachedRows(data: GanttData) {
+  if (!_rowsVal || _rowsKey !== data) {
+    _rowsVal = buildPlanoRows(data, fwOrderFrom(data))
+    _rowsKey = data
   }
   return _rowsVal
 }
@@ -642,13 +579,10 @@ function cachedCalendar(data: GanttData) {
  */
 export function makeFactoryLoadLoader(
   data: GanttData | null,
-  /** The published GCR plan the Carga de Fábrica has loaded, or null when GCR is not in the
-   *  Tipo selection. Null is not an error state: it is a period loaded without GCR. */
-  gcrRows: GcrPlanWeek[] | null = null,
 ) {
   return async (params: ExcelItemsParams): Promise<FactoryLoadResult> => {
     if (!data) throw new Error('Nenhum período carregado na Carga de Fábrica.')
     const catalog = await loadCatalog()
-    return buildFactoryLoadItems(data, catalog, params, gcrRows)
+    return buildFactoryLoadItems(data, catalog, params)
   }
 }

@@ -21,8 +21,6 @@ import type React from 'react'
 import type { GanttData, TransactedHoursRollup, TransactedHoursScope } from '@/lib/api'
 import { windowGanttData } from '@/lib/ganttUtils'
 import { SCHEDULE_TIPO_KEYS } from '@/lib/tipos'
-import type { GcrPlanWeek } from '@/lib/gcrPlan'
-import { loadGcrSummary, takePrimedGcrSummary } from '@/lib/gcrSummaryLoad'
 import { useGanttFilters } from '@/components/gantt/useGanttFilters'
 import { useSummaryCompute } from '@/components/gantt/useSummaryCompute'
 import type { SummaryTestResult, StatsResult } from '@/components/gantt/types'
@@ -87,11 +85,6 @@ interface GanttInlineState extends GanttInlineSnapshot {
    *  Kept OUT of `summaryTestData`: that is the Schedule aggregation, and GCR has no Schedule
    *  behind it. The page renders it as its own Tipo card rather than folding it into a rollup
    *  built on groups it does not appear in. `null` = not selected, or not loaded yet. */
-  gcrRows: GcrPlanWeek[] | null
-  /** GCR is in the selection and its rows have not arrived. `gcrRows` alone cannot say this:
-   *  it is null both while loading and when the Tipo was never selected, and the page must
-   *  show a placeholder for the first and nothing at all for the second. */
-  gcrLoading: boolean
 
   // ── Horas Transacionadas: UNSAVED prévia ──
   /** Rollup returned by a prévia that has not been written to the database. Set by the
@@ -162,25 +155,6 @@ export function GanttInlineProvider({ children }: { children: React.ReactNode })
 
   // ── The GCR plan, on the same terms the Gantt loads it ──────────────────────────
   // Fetched only when GCR is part of the loaded selection, and kept once fetched: a published
-  // plan does not move under a session. Deselecting is a DERIVATION (`gcrRows` below), not a
-  // reset, so toggling the Tipo off and on again does not re-fetch what has not changed.
-  // `takePrimedGcrSummary` picks up the load the launch screen already started, so the page
-  // and the Gantt cost one request between them.
-  const gcrSelected = !!snap.lineTypes?.includes('gcr')
-  const [gcrRowsRaw, setGcrRowsRaw] = useState<GcrPlanWeek[] | null>(null)
-  useEffect(() => {
-    if (!gcrSelected || gcrRowsRaw !== null) return
-    let alive = true
-    void (takePrimedGcrSummary() ?? loadGcrSummary()).then(res => {
-      // `[]` on failure, not null: null is "not loaded yet" and would re-fire this effect
-      // forever against a backend that just refused. The card then shows 0 h, which is what
-      // an unreadable plan contributes.
-      if (alive) setGcrRowsRaw(res.rows ?? [])
-    })
-    return () => { alive = false }
-  }, [gcrSelected, gcrRowsRaw])
-  const gcrRows = gcrSelected ? gcrRowsRaw : null
-  const gcrLoading = gcrSelected && gcrRowsRaw === null
 
   const [summaryTestData,  setSummaryTestData]  = useState<SummaryTestResult | null>(null)
   const [summaryComputing, setSummaryComputing] = useState(false)
@@ -208,14 +182,13 @@ export function GanttInlineProvider({ children }: { children: React.ReactNode })
     years, quarters, months, allFws, allAreas, allModels, allWorkstations,
     availableLineTypes, activeBizISOs,
     summaryTestData, summaryComputing,
-    gcrRows, gcrLoading,
     pendingRollup, setPendingRollup,
     mainLocoNames, setMainLocoNames,
   }), [
     snap, effectiveData,
     selYears, selQuarters, selMonths, selFws, selAreas, selModels, selWorkstations, summaryLineTypes,
     years, quarters, months, allFws, allAreas, allModels, allWorkstations, availableLineTypes, activeBizISOs,
-    summaryTestData, summaryComputing, gcrRows, gcrLoading, pendingRollup, mainLocoNames,
+    summaryTestData, summaryComputing, pendingRollup, mainLocoNames,
   ])
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>
