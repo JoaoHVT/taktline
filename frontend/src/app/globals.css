@@ -1,0 +1,168 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Hide browser number-input spinner arrows globally */
+input[type=number]::-webkit-outer-spin-button,
+input[type=number]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type=number] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ── Simular wave-pulse: red ripple on button label ───────────── */
+@keyframes wab-wave {
+  0%   { color: #9CA3AF; text-shadow: none; }
+  40%  { color: #D32F2F; text-shadow: 0 0 8px #D32F2F99, 0 0 16px #D32F2F44; }
+  70%  { color: #B71C1C; text-shadow: 0 0 14px #B71C1C88; }
+  100% { color: #9CA3AF; text-shadow: none; }
+}
+
+@keyframes wab-ring {
+  0%   { box-shadow: 0 0 0 0px #D32F2F55; }
+  60%  { box-shadow: 0 0 0 6px #D32F2F00; }
+  100% { box-shadow: 0 0 0 0px #D32F2F00; }
+}
+
+.simular-wave-label {
+  animation: wab-wave 2s ease-in-out infinite;
+}
+
+.simular-wave-btn {
+  animation: wab-ring 2s ease-in-out infinite;
+}
+
+@keyframes wab-icon-wave {
+  0%   { opacity: 0.55; filter: none; }
+  40%  { opacity: 1;    filter: drop-shadow(0 0 4px #D32F2F88); }
+  70%  { opacity: 0.9;  filter: drop-shadow(0 0 6px #B71C1C77); }
+  100% { opacity: 0.55; filter: none; }
+}
+
+.simular-wave-icon {
+  animation: wab-icon-wave 2s ease-in-out infinite;
+}
+
+/* ── Horizontal wave for ModoDropdown option labels ── */
+@keyframes wab-wave-h {
+  0%, 100% { color: inherit; text-shadow: none; }
+  50%      { color: #D32F2F; text-shadow: 0 0 6px #D32F2F55; }
+}
+
+.modo-wave-label {
+  animation: wab-wave-h 2s ease-in-out infinite;
+}
+
+/* ── App-switch locomotive: the button that changes app ─────────────
+   The loco pulls the way it faces — the same direction the page slides
+   when you press it. Hover eases out, press overshoots and squashes
+   slightly, so the icon reads as departing rather than lit up.
+   Default block is the left-facing loco (Capacidade → Carga de Fábrica);
+   .loco-btn--rtl mirrors it for the return trip and MUST stay after,
+   since both selectors carry the same specificity. */
+.loco-btn .loco-icon {
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.loco-btn:hover .loco-icon {
+  transform: translateX(-2.5px);
+}
+
+.loco-btn:active .loco-icon {
+  transform: translateX(-5px) scaleX(0.94);
+  transition-duration: 90ms;
+}
+
+/* Fires once per press, after the pull-back, so the icon rebounds. */
+@keyframes loco-depart {
+  0%   { transform: translateX(-5px) scaleX(0.94); }
+  55%  { transform: translateX(1.5px) scaleX(1.03); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+
+.loco-btn.loco-departing .loco-icon {
+  animation: loco-depart 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Right-facing loco: same motion, mirrored. */
+.loco-btn--rtl:hover .loco-icon {
+  transform: translateX(2.5px);
+}
+
+.loco-btn--rtl:active .loco-icon {
+  transform: translateX(5px) scaleX(0.94);
+}
+
+@keyframes loco-depart-rtl {
+  0%   { transform: translateX(5px) scaleX(0.94); }
+  55%  { transform: translateX(-1.5px) scaleX(1.03); }
+  100% { transform: translateX(0) scaleX(1); }
+}
+
+.loco-btn--rtl.loco-departing .loco-icon {
+  animation: loco-depart-rtl 380ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Home button: the navigation pair's other half ──────────────────
+   Same spring, same 200ms, same press-squash as .loco-btn beside it —
+   the two sit side by side and anything close-but-different at this
+   size reads as one of them being broken. Only the AXIS differs: the
+   loco pulls the way the page slides, but Home is not a direction on
+   screen, so the house lifts instead and settles back on press. */
+.home-btn .home-icon {
+  transition: transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.home-btn:hover .home-icon {
+  transform: translateY(-2px);
+}
+
+.home-btn:active .home-icon {
+  transform: translateY(1px) scaleY(0.94);
+  transition-duration: 90ms;
+}
+
+/* ── App-switch page slide ──────────────────────────────────────────
+   Applied to the two app shells only while a switch is in flight; the
+   inline transform is removed once it lands, so no `position: fixed`
+   descendant is ever left anchored to a transformed ancestor. */
+.app-slide {
+  transition: transform 340ms cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: transform;
+}
+
+/* ── No `prefers-reduced-motion` block here, deliberately ──────────────────────────
+   There was one, cancelling the loco button's nudge/depart and the app-switch slide. On Windows
+   the flag mirrors "Animation effects" (Settings → Accessibility → Visual effects, read by Chrome
+   through SPI_GETCLIENTAREAANIMATION) — a display preference plenty of machines have off without
+   ever asking for a still interface, this repo's dev machine included. The whole app's motion was
+   therefore dead for those users while nothing indicated why; see the note in
+   components/gantt/LocomotiveProgress.tsx for how long that cost to find.
+   If it is ever honored again, SUBDUE the motion (shorter, no bounce, single direction), never
+   remove it — a control that does not visibly respond reads as broken, not as accessible. */

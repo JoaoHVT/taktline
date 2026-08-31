@@ -1,0 +1,39 @@
+# ── Dependabot ────────────────────────────────────────────────────────────────
+# The audit workflow TELLS you a dependency is vulnerable; this opens the PR that fixes it.
+# Both halves are wanted: an alert nobody has time to action is not a control.
+#
+# Grouped into one PR per ecosystem per week. Ungrouped, this repository produces a dozen
+# single-package PRs a week (Next.js alone drags ~40 transitive pins), and a review queue that
+# long is one nobody reads — which is the failure mode this is meant to prevent, not cause.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      frontend-dependencies:
+        patterns: ['*']
+    ignore:
+      # Pinned to a CDN tarball, not a registry version — the npm-published `xlsx` line was
+      # abandoned at 0.18.5 with two unfixed high advisories, and the patched builds are
+      # distributed only from cdn.sheetjs.com. Dependabot cannot resolve or bump that URL, so
+      # it is upgraded by hand (bump the version in the URL). See frontend/package.json.
+      - dependency-name: xlsx
+
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      backend-dependencies:
+        patterns: ['*']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

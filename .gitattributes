@@ -1,0 +1,17 @@
+# Fim de linha dos scripts que rodam no Windows — inclusive na maquina do usuario final,
+# onde nao ha quem depure. Nao depender do core.autocrlf de quem clonar.
+#
+# .cmd/.bat: o cmd.exe tropeca em arquivo com LF puro (goto, rotulos e blocos entre
+# parenteses), com falha silenciosa ou no meio da execucao. CRLF e obrigatorio.
+# .ps1: o PowerShell aceita os dois, mas manter CRLF evita diff ruidoso no Windows.
+#
+# O BOM UTF-8 dos .ps1 (exigido pelo PS 5.1, ver deploy/README.md secao 7) nao e afetado
+# por estas regras — o git nao mexe em BOM.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+
+# Caddyfile NAO pode ganhar BOM (o parser le EF BB BF como parte do primeiro token e o
+# bloco de opcoes globais deixa de ser reconhecido). Ele e gerado, nao versionado, mas a
+# regra fica registrada aqui caso um dia entre no repositorio.
+Caddyfile text eol=lf

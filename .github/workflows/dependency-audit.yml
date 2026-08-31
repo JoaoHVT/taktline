@@ -1,0 +1,75 @@
+# ── Dependency vulnerability gate ─────────────────────────────────────────────
+# The finding this exists for: nothing ever checked the pinned dependencies against an
+# advisory feed, so the frontend sat on 9 high-severity advisories (an axios auth-bypass and
+# a Next.js middleware bypass among them) and the backend on 29 across 7 packages — including
+# PyJWT, which validates every Azure token, and python-multipart, which parses every upload.
+# All of them were fixed by a version bump that was available the whole time. Nobody was
+# negligent; there was simply no signal.
+#
+# Both ecosystems are audited because a gate on one of them is a gate on neither.
+#
+# `schedule` is the half that matters. A push-triggered audit only reports advisories that
+# existed when the manifest last changed; the weekly run is what catches a CVE published
+# against a dependency nobody has touched in months, which is how every finding above arrived.
+name: Dependency audit
+
+# ── If every run ever fails at `startup_failure` with ZERO jobs, it is not this file ──────
+# It happened once, on 2026-08-18: every run in the repository died before a single step ran,
+# this workflow's and GitHub's own `dependabot-updates` ones alike, and a failure notification
+# landed on EVERY push — including pushes touching none of the paths filtered below, because
+# the run is created BEFORE the trigger filters are evaluated. The cause was GitHub Actions
+# billing not being configured on the account (this repository is private, so its minutes are
+# billable). Resolved by setting billing up; nothing here was ever changed to fix it. The tell
+# is `path: BuildFailed` and a workflow name of "" on the run, with zero jobs and zero logs —
+# check github.com/settings/billing before reading a single line of YAML.
+on:
+  push:
+    paths:
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'backend/requirements.txt'
+      - '.github/workflows/dependency-audit.yml'
+  pull_request:
+    paths:
+      - 'frontend/package.json'
+      - 'frontend/package-lock.json'
+      - 'backend/requirements.txt'
+  schedule:
+    # Mondays 06:00 UTC — 03:00 in Contagem, so a failure is waiting at the start of the week.
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  npm:
+    name: npm audit (frontend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      # --package-lock-only: audit resolves entirely from package-lock.json, so this needs no
+      # install. That also keeps the job independent of cdn.sheetjs.com, which hosts the only
+      # patched SheetJS line (see frontend/package.json) and is not an npm registry mirror.
+      - name: Audit production + dev dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high --package-lock-only
+
+  pip:
+    name: pip-audit (backend)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install pip-audit
+        run: python -m pip install --quiet pip-audit
+      # Audits the PINNED file, not an installed environment: requirements.txt is what Railway
+      # builds from, so it is the artifact that has to be clean. No project dependency is
+      # installed here, which keeps the job fast and free of gurobipy/pyodbc build steps.
+      - name: Audit pinned requirements
+        run: pip-audit -r backend/requirements.txt --progress-spinner off

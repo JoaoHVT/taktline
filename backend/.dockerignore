@@ -1,0 +1,17 @@
+# Mirrors .gitignore so a Docker/Nixpacks build context stays lean.
+# (Railway/Nixpacks builds from the git commit, so untracked files are
+#  already excluded — this is belt-and-suspenders and covers a future Dockerfile.)
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.env
+.env.*
+.job_state/
+*.log
+_srv.log*
+_startup.log*
+.DS_Store
+imagens/
+.vscode/
+.claude/

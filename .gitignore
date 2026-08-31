@@ -1,0 +1,175 @@
+# ==============================================================================
+# OptVision — root ignore rules
+# ==============================================================================
+# Only source code and project assets belong under version control. Anything
+# generated, machine-specific, secret, or reproducible from a build stays out.
+# backend/.gitignore and frontend/.gitignore add rules scoped to those trees.
+#
+# Rule of thumb for anything new: if a tool produced it, it differs per
+# developer, or it holds real business data — ignore it here.
+
+# ── Secrets & credentials (never commit — highest priority) ──────────────────
+# Private-key material anywhere in the repo. Public certs (*.crt/*.cer) are
+# intentionally NOT ignored, so a public CA bundle can still be committed.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.jks
+*.keystore
+id_rsa*
+*.lic
+secrets.json
+credentials.json
+
+# ── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.eggs/
+venv/
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ── Node / Next.js ───────────────────────────────────────────────────────────
+node_modules/
+.next/
+out/
+build/
+dist/
+.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+.vercel
+
+# ── Runtime business data (must never be versioned) ──────────────────────────
+# Source workbooks and exports hold real production data; they are supplied to
+# the running service, never stored in Git. See backend/README.md.
+*.xlsx
+*.xls
+*.xlsm
+backend/config.json
+backend/session_state.json
+backend/session_state.backup.json
+backend/.job_state/
+
+# ── Logs ─────────────────────────────────────────────────────────────────────
+*.log
+*.log.err
+logs/
+backend/_*.log
+backend/_*.log.err
+frontend/.nextdev.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ── Caches & temporary files ─────────────────────────────────────────────────
+.cache/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+*~
+
+# ── AI / agent tooling (developer-local, not application code) ───────────────
+.claude/
+.agents/
+.cursor/
+.aider*
+CLAUDE.md
+AGENTS.md
+skills-lock.json
+
+# Generated knowledge graphs (graphify). Rebuildable from source with
+# `/graphify .` — the graph.json/graph.html pair is several MB per tree.
+graphify-out/
+
+# ── IDE / editor ─────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# ── OS cruft ─────────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ── Legacy (replaced by the database — kept out of the repo) ─────────────────
+backend/CapB3356103.py
+
+# ── Tests (local only — never committed) ──────────────────────────────────────
+backend/tests/
+frontend/tests/
+
+# ── Security assessment / IT correspondence (local only) ─────────────────────
+# These enumerate the application's current security posture INCLUDING the gaps
+# that are still open (DB TLS verification, CORS fallback, unbounded upload,
+# domain-wide Reader). That is a remediation checklist for whoever holds it, so
+# it stays out of git history even though this repo is private. Share the files
+# directly with the people who need them.
+SECURITY-REVIEW-RESPONSE.md
+RESPONSE-TO-IT.md
+
+# Dumps de banco — nunca versionar (dados de producao)
+*.dump
+*.sql.gz
+# ...e o formato PLAIN, que `pg_dump -f backup.sql` produz por padrao: e o mesmo dump com
+# outra extensao, e so *.dump/*.sql.gz o deixavam passar. As duas excecoes sao DDL escrita a
+# mao (indices e sequences), sem uma linha de dado, e ficam versionadas de proposito.
+*.sql
+!index-rollback.sql
+!deploy/fix-sequences.sql
+
+# ── Artefatos do lancador de duplo clique (deploy/launcher) ──────────────────
+# dist/ e build/ ja saem pelas regras de Node acima; faltavam estes tres. O .spec e gerado
+# pelo PyInstaller e carrega os caminhos ABSOLUTOS da maquina que compilou (nome de usuario
+# incluso); o .exe e binario de varios MB que se reconstroi com um comando; e o repo.txt
+# existe justamente para guardar o caminho do repositorio no disco de quem usa.
+*.spec
+*.exe
+repo.txt
+
+# Caddyfile gerado por deploy/pki/New-Caddyfile.ps1. O lugar dele e ~/.optvision/tools, fora
+# da arvore; esta regra e a rede de seguranca para a copia que alguem traga para ca — ele
+# fixa hostname, IP e os caminhos de disco deste host.
+Caddyfile
+
+# Lista de senhas geradas na migracao do Entra ID para o login local. O lugar dela e
+# ~/.optvision/senhas-iniciais.txt, fora da arvore; esta regra e a rede de seguranca para
+# uma copia que alguem traga para ca — o arquivo tem senha em texto puro, uma linha por conta.
+senhas-iniciais.txt
+
+# Saida de run do otimizador escrita ao lado do codigo (services/optimizer.py grava o log e o
+# JSON de resultado no cwd do backend). Nao e artefato de build nem entrada: e o resultado de
+# UMA execucao, e o log nomeia os operarios do HeadCount, um por linha.
+backend/base_log.txt
+backend/base_result.json

@@ -1,0 +1,31 @@
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# ── Secrets / env (keep local, never commit) ────────────
+.env
+.env.*
+!.env.example
+
+# ── Runtime state & logs (regenerated at runtime) ───────
+.job_state/
+*.log
+_srv.log*
+_startup.log*
+
+# ── OS cruft ────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Frontend assets: canonical copy lives in
+#    ../frontend/public/imagens — not used by the backend,
+#    so keep them out of the backend build/image. ─────────
+imagens/
+
+# NOTE: HorasB3.xlsx IS ignored (root .gitignore, `*.xlsx`) and is NOT in the
+# repository. It holds real production data, so keeping it out of Git is
+# deliberate — a previous note here claimed the opposite and was simply wrong.
+# gantt_builder.py falls back to it only when the database is unreachable, so the
+# file must be supplied to the runtime host/image out-of-band (see backend/README.md).

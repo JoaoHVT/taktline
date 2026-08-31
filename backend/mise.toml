@@ -1,0 +1,12 @@
+[tools]
+# Pin a Python patch that has BOTH a precompiled linux-x64 build AND GitHub
+# artifact attestations in mise:
+#   • 3.13.14 had no prebuilt binary  → "no precompiled python found"
+#   • 3.13.1 had a binary but no attestation → attestation verification failed
+# 3.13.5 (released after attestations began) satisfies both checks.
+python = "3.13.5"
+
+[settings]
+# Safety net: skip attestation verification if the pinned build still lacks one.
+# The download checksum is verified regardless, so integrity is preserved.
+python.github_attestations = false
