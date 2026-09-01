@@ -1,70 +1,54 @@
 /**
- *  Onde a API mora — resolvido EM TEMPO DE EXECUCAO, e nao soldado no pacote.
+ *  Where the API lives — resolved AT RUNTIME rather than baked into the bundle.
  *
- *  Atras da porta de entrada do Caddy (PUBLIC_ORIGIN definido) a implantacao e de
- *  ORIGEM UNICA: o mesmo host:porta serve as paginas e encaminha /api e /ws para o
- *  backend em loopback. Ate aqui o start.py compilava o pacote contra a entrada
- *  CANONICA de PUBLIC_ORIGIN — o nome .local — o que prendia TODO navegador aquele
- *  nome, qualquer que fosse o endereco por onde a pessoa chegou.
+ *  The demo ships as ONE origin: the Next server serves the pages and forwards /api to the
+ *  backend on loopback (see next.config.ts `rewrites`). So every HTTP call goes out RELATIVE
+ *  and reaches the backend whatever address the browser used to get here — a container port, a
+ *  tunnel, a reverse proxy in front — with nothing recompiled.
  *
- *  Isso so funciona enquanto todo cliente consegue resolver o nome, e `.local` nao e
- *  DNS: e mDNS (RFC 6762), respondido por multicast no enlace local. Nao atravessa
- *  VLAN nem sub-rede, depende de UDP 5353 entrar no host, e o proprio host resolve o
- *  seu nome localmente esteja ou nao alguem respondendo na rede — por isso a maquina
- *  hospedeira SEMPRE funciona enquanto um cliente leva DNS_PROBE_STARTED.
+ *  The absolute base below is the fallback for the split deployment: `next dev` on :3000 and
+ *  uvicorn on :8000 as two separate servers, which is what a contributor runs locally.
  *
- *  E a alternativa documentada — a entrada por IP de PUBLIC_ORIGIN, que o Caddy ja
- *  atende e o certificado ja cobre no SAN — NAO salvava: a pagina abria pelo IP e
- *  entao cada requisicao saia para o nome que aquele cliente nao resolve. Falha pior
- *  que a primeira, porque a tela carrega antes de quebrar.
- *
- *  Derivar de window.location faz cada cliente falar com o endereco pelo qual ELE
- *  chegou — nome, IP ou um registro de DNS futuro — sem recompilar nada.
+ *  The WebSocket is the one thing that cannot be relative. It needs a scheme and an authority,
+ *  and a Next rewrite does NOT forward a protocol upgrade — so a socket derived from the page's
+ *  own origin would point at the Next server, which serves no /ws, and the optimizer's progress
+ *  stream would never connect. It therefore uses the configured absolute URL unless the page is
+ *  demonstrably behind something that proxies the upgrade too.
  */
 
-/** start.py grava "1" quando existe porta de entrada TLS (PUBLIC_ORIGIN definido). */
+/** Set at build time when the app is served single-origin (the container does this). */
 const SAME_ORIGIN = process.env.NEXT_PUBLIC_SAME_ORIGIN === '1'
 
-/** Base absoluta. Continua sendo a verdade nas implantacoes SEM proxy (the host, dev
- *  puro) e no teste de host de isLocalApi(), que precisa do nome para decidir se o
- *  backend pode dormir. Nao a use para montar requisicao — use API_BASE. */
+/** The absolute base. Still the truth for a split dev deployment, and what useBackendHealth
+ *  reads to decide whether the backend is local. Do not build requests from it — use API_BASE. */
 export const CONFIGURED_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 export const CONFIGURED_WS_URL  = process.env.NEXT_PUBLIC_WS_URL  || 'ws://localhost:8000'
 
-/** '' atras da porta de entrada: axios e fetch resolvem todo caminho contra a origem
- *  atual. Fora dela, a base absoluta de sempre. */
+/** '' when single-origin: axios and fetch then resolve every path against the current origin. */
 export const API_BASE =
   SAME_ORIGIN && typeof window !== 'undefined' ? '' : CONFIGURED_API_URL
 
-/** A lista inteira de PUBLIC_ORIGIN — as origens que o Caddy realmente atende. */
+/** Origins that terminate TLS in front of the app AND proxy the WebSocket upgrade. Comma
+ *  separated; empty in the default container, where the port test below is enough. */
 const GATEWAY_ORIGINS = (process.env.NEXT_PUBLIC_ORIGINS || '')
   .split(',')
   .map(o => o.trim().replace(/\/$/, ''))
   .filter(Boolean)
 
-/** Esta aba chegou pela porta de entrada TLS?
+/** Did this tab arrive through such a gateway?
  *
- *  Vale para o WebSocket, e so para ele. O HTTP relativo funciona nas duas entradas: atras
- *  do proxy quem encaminha /api e o Caddy, e no acesso direto ao servidor de desenvolvimento
- *  quem encaminha e o reescritor do next.config. Upgrade de protocolo o reescritor NAO
- *  encaminha — entao numa aba aberta em http://localhost:3000 derivar wss://<host da aba>
- *  aponta o socket para o proprio Next, que nao tem /ws, e o progresso da otimizacao nunca
- *  conecta. Nesse caso o valor certo e a base absoluta configurada.
- *
- *  A porta vazia e o que mantem a intencao original intacta: um nome NOVO apontado para
- *  este host (registro A no DNS interno, um IP que ainda nao esta na lista) chega na porta
- *  padrao do esquema e continua sendo tratado como origem unica, sem recompilar nada. Quem
- *  cai no ramo de baixo e so quem carrega porta explicita fora da lista — na pratica, a
- *  porta do proprio frontend. */
+ *  An empty port keeps the intent open-ended: a new name pointed at this host arrives on the
+ *  scheme's default port and is treated as single-origin without a rebuild. What falls through
+ *  is a tab carrying an explicit port that is not listed — in practice the frontend's own dev
+ *  port, which is exactly the case that must use the absolute URL. */
 function behindGateway(): boolean {
   if (typeof window === 'undefined') return false
   if (GATEWAY_ORIGINS.includes(window.location.origin)) return true
   return window.location.port === ''
 }
 
-/** WebSocket nao aceita URL relativa — precisa de esquema e autoridade. Derivados do
- *  protocolo da pagina para nao produzir ws:// numa pagina https (o navegador bloqueia
- *  como conteudo misto). */
+/** Derived from the PAGE's protocol, never a fixed scheme: ws:// on an https page is blocked
+ *  as mixed content. */
 export const WS_BASE =
   SAME_ORIGIN && typeof window !== 'undefined' && behindGateway()
     ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}`

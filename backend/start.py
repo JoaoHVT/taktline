@@ -3,12 +3,11 @@ start.py
 --------
 Local launcher: starts the API on 127.0.0.1 and nothing else.
 
-LOOPBACK ONLY, deliberately. This is a demo running someone else's sample data on someone's own
-machine; binding 0.0.0.0 would put it on whatever network that machine happens to be on. `--host`
-is therefore not a flag: to expose it, put a reverse proxy in front and point it at 127.0.0.1.
+LOOPBACK ONLY, deliberately. `--host` is not a flag here: to expose the app, run ../run_demo.py,
+which starts Next in front of this and takes --host explicitly.
 
-The frontend is a static export served by the API itself (see the Dockerfile), so there is no
-second process to supervise here.
+This is the BACKEND ALONE — useful when working on it, or alongside `npm run dev` in the other
+window. To run the whole demo, use ../run_demo.py.
 """
 
 from __future__ import annotations

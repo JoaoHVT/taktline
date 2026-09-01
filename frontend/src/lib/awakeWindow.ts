@@ -77,11 +77,22 @@ export function subscribeServerQuiet(fn: () => void): () => void {
   return () => { _quietSubs.delete(fn) }
 }
 
-/** THE gate every background poller uses. Poll when the backend can't sleep anyway (local dev),
- *  or when we're inside working hours — and never while the server is deliberately off. */
-export function shouldPollNow(now: Date = new Date()): boolean {
-  if (_serverQuiet) return false
-  return isLocalApi() || isWithinAwakeWindow(now)
+/** THE gate every background poller uses.
+ *
+ *  The working-hours arm is GONE. It existed because the previous host slept on an idle timer
+ *  and an idle poller silently held it awake — so polling outside 08:00–18:00 Mon–Fri cost real
+ *  money. Nothing here sleeps now, and keeping the clock test would have been strictly worse
+ *  than useless: a demo opened at 20:00 or on a Sunday would show its status indicators parked
+ *  and its live counters frozen, which reads as a broken app rather than as a schedule nobody
+ *  told the visitor about.
+ *
+ *  `isWithinAwakeWindow` is kept and exported because it is a pure clock predicate with tests
+ *  against it, and it is what a future host with a sleep schedule would gate on again.
+ *
+ *  Quiet mode still closes the gate: when the server is deliberately off, every request is
+ *  refused, and beating on it only fills the console with failures the user cannot act on. */
+export function shouldPollNow(_now: Date = new Date()): boolean {
+  return !_serverQuiet
 }
 
 // When the app is actively used, real API traffic keeps the backend awake regardless —
@@ -99,12 +110,10 @@ export function isRecentlyActive(lastContactAt: number, now: number = Date.now()
   return lastContactAt > 0 && now - lastContactAt < RECENT_ACTIVITY_MS
 }
 
-/** Poll gate that ALSO opens during active off-hours use: poll inside working hours (or
- *  local dev), or whenever real traffic proves the backend is currently awake.
- *
- *  Quiet mode overrides BOTH arms. The recent-activity arm especially: right after the switch
- *  is thrown there is by definition fresh traffic (the admin's own save), so without this the
- *  indicators would keep beating for another RECENT_ACTIVITY_MS and hold the server up. */
+/** Historically a second gate that ALSO opened during active off-hours use. With the clock arm
+ *  gone it says the same thing as `shouldPollNow`; it is kept because callers read as intended
+ *  through it ("poll if we should, or if someone is clearly here") and because a host with a
+ *  sleep schedule would need the distinction back. Quiet mode still overrides both arms. */
 export function shouldPollOrActive(lastContactAt: number, now: number = Date.now()): boolean {
   if (_serverQuiet) return false
   return shouldPollNow(new Date(now)) || isRecentlyActive(lastContactAt, now)
