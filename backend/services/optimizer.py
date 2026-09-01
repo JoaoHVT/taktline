@@ -59,6 +59,27 @@ DEFAULT_PHASE_LIMIT               = MAX_PHASES
 DEFAULT_GAP_PCT                   = 2.0
 DEFAULT_TIME_LIMIT_S              = 60.0
 DEFAULT_OT_MAX_HOURS              = 0.0
+
+# ── Model-size ceiling ────────────────────────────────────────────────────────
+# The demo runs on the Gurobi pip package, whose bundled licence is capped at 2000 variables
+# and 2000 linear constraints. Past that cap Gurobi raises mid-solve, after the model is built
+# and the run has been reported as started — which reads as a crash rather than as a limit.
+#
+# So the size is checked BEFORE the first optimize() and refused with a message that says what
+# the number was. The ceiling sits below the licence cap on purpose: a phase adds constraints
+# as it is fixed (see the lex-fix cleanup), so a model that merely fits at build time can still
+# cross the cap three phases in.
+LICENSE_MAX_VARS        = 2000
+LICENSE_MAX_CONSTRS     = 2000
+MODEL_SIZE_HEADROOM     = 500     # room for the constraints each fixed phase adds
+MODEL_MAX_VARS          = LICENSE_MAX_VARS - MODEL_SIZE_HEADROOM
+MODEL_MAX_CONSTRS       = LICENSE_MAX_CONSTRS - MODEL_SIZE_HEADROOM
+
+
+class ModelTooLargeError(RuntimeError):
+    """The built model exceeds what the bundled licence can solve."""
+
+
 MIN_PERSON_ALLOC_HOURS            = 1.0
 PHASE1_ABS_GAP_HOURS              = 1e-4
 PHASE4_ABS_GAP_HOURS              = 0.5   # 0.5h fragmentation gap is negligible in practice
@@ -1392,6 +1413,12 @@ def run_optimization(
 
     model.update()
     _log(f"[MODEL] Total — Variáveis: {model.NumVars}  Restrições: {model.NumConstrs}")
+    if model.NumVars > MODEL_MAX_VARS or model.NumConstrs > MODEL_MAX_CONSTRS:
+        raise ModelTooLargeError(
+            f"Modelo com {model.NumVars} variáveis e {model.NumConstrs} restrições excede o "
+            f"limite desta demonstração ({MODEL_MAX_VARS} / {MODEL_MAX_CONSTRS}). "
+            "Reduza o número de itens ou de workstations do período."
+        )
     _prog(25, "Modelo criado. Iniciando fases de otimização...")
 
     phase_metrics: list[dict] = []

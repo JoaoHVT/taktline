@@ -518,10 +518,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
 ENVIRONMENT  = os.getenv("ENVIRONMENT", "development")
-JOB_STATE_DIR = Path(__file__).resolve().parent / ".job_state"
-JOB_STATE_DIR.mkdir(exist_ok=True)
-
-# Armazena jobs em memória (para produção use Redis)
+# Armazena jobs em memória; o estado terminal vai para a tabela solver_jobs.
 jobs: dict[str, dict] = {}
 
 # The in-memory jobs dict is never cleared during the process lifetime, so over a
@@ -1219,7 +1216,6 @@ def _update_job(job_id: str, **kwargs):
     if job_id not in jobs:
         jobs[job_id] = _load_job(job_id) or {}
     jobs[job_id].update(kwargs)
-    _persist_job(job_id)
 
 
 def _append_job_log(job_id: str, line: str) -> None:
@@ -1231,11 +1227,8 @@ def _append_job_log(job_id: str, line: str) -> None:
         cur = []
     cur.append(line)
     jobs[job_id]["log"] = cur[-300:]
-    _persist_job(job_id)
 
 
-def _job_state_path(job_id: str) -> Path:
-    return JOB_STATE_DIR / f"{job_id}.json"
 
 
 def _public_job_data(data: dict | None) -> dict:
@@ -1244,25 +1237,11 @@ def _public_job_data(data: dict | None) -> dict:
     return {k: v for k, v in data.items() if not k.startswith('_')}
 
 
-def _persist_job(job_id: str) -> None:
-    """Fast path: write job state to local file only.
-    Called on every update (progress, log lines) so must be fast.
-    DB persistence is handled separately only at creation and terminal states."""
-    raw = jobs.get(job_id)
-    if not raw:
-        return
-
-    payload = _public_job_data(raw)
-    json_str = json.dumps(payload, ensure_ascii=False)
-
-    # File write only — fast, no network I/O
-    try:
-        tmp_path = _job_state_path(job_id).with_suffix(".json.tmp")
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            handle.write(json_str)
-        os.replace(tmp_path, _job_state_path(job_id))
-    except Exception as exc:
-        logger.warning("[jobs] Falha ao persistir job em arquivo: %s", exc)
+# _persist_job is GONE, and its call sites with it. It mirrored job state to
+# backend/.job_state/<id>.json on every progress tick — the fast path for a deployment where a
+# second worker had to read a job it did not own. This build is one process against a throwaway
+# database, so the file was a second copy of state `_persist_job_to_db` already holds, and it was
+# a write path driven by whatever a visitor clicks. The solver now writes no files at all.
 
 
 def _persist_job_to_db(job_id: str) -> None:
@@ -1291,18 +1270,7 @@ def _persist_job_to_db(job_id: str) -> None:
 
 
 def _load_job(job_id: str) -> dict | None:
-    # ── Try file first (fastest) ──────────────────────────────────────────
-    path = _job_state_path(job_id)
-    if path.exists():
-        try:
-            with open(path, "r", encoding="utf-8") as handle:
-                data = json.load(handle)
-            if isinstance(data, dict):
-                return data
-        except Exception:
-            pass
-
-    # ── Fallback: DB (cross-worker / reconnect after restart) ──────────────
+    """Read a job this process no longer holds in memory — after a prune, or a reconnect."""
     if _DB_AVAILABLE:
         try:
             with get_db() as db:
@@ -1449,17 +1417,101 @@ def get_job(job_id: str, _user: dict = Depends(require_auth)):
     )
 
 
+# ── Demo limits on the solver ─────────────────────────────────────────────────────────────
+# The solver is the thing worth showing here and also the only expensive thing in the app, so
+# it is the one surface a visitor can use to cost the host real money. The Editor role gate
+# that used to stand here is meaningless now: every visitor signs in as the same account, so
+# the role answers a question nobody is asking. What has to be bounded is the RUN.
+#
+# Four limits, each closing a different hole, applied in this order:
+#   • SIZE     — the payload's collections are capped so a crafted request cannot build a model
+#                far larger than the demo dataset can produce. optimizer.MODEL_MAX_VARS is the
+#                backstop behind this one. FIRST because it is deterministic and costs nothing:
+#                a malformed request must not burn the caller's cooldown before being told so.
+#   • DEPTH    — ONE run at a time for the whole process, not per user. A second request is
+#                refused rather than queued: a queue that a visitor can fill is the same
+#                problem with a delay in front of it.
+#   • INTERVAL — a per-caller cooldown, so refusing concurrency does not turn into a tight
+#                retry loop that keeps the single slot permanently occupied.
+#   • TIME     — every run is clamped to DEMO_TIME_LIMIT_S regardless of what the client asks
+#                for. The payload field stays (the UI shows it) but the server decides.
+#
+# None of it is authorization. It is a cost ceiling, and it is deliberately generous enough
+# that an honest visitor never meets it.
+DEMO_TIME_LIMIT_S     = 5.0
+DEMO_MAX_ITEMS        = 400
+DEMO_MAX_MAP_ENTRIES  = 400
+DEMO_MIN_INTERVAL_S   = 15.0
+_ACTIVE_JOB_STATES    = ("queued", "running")
+
+_demo_last_start: dict[str, float] = {}
+_demo_start_lock = threading.Lock()
+
+
+def _demo_caller_key(request: Request, user: dict) -> str:
+    """Who the cooldown applies to. The account is shared, so the client address is the only
+    thing separating one visitor from another; the username rides along so a proxy that
+    collapses everyone onto one address still separates sessions where it can."""
+    host = (request.client.host if request.client else "") or "?"
+    return f"{host}|{_username_of((user or {}).get('email', ''))}"
+
+
+def _enforce_demo_solver_limits(payload: "OptimizationPayload", request: Request, user: dict) -> None:
+    """Clamp the run and refuse a second one. Raises HTTPException; mutates `payload` in place."""
+    # ── SIZE ──
+    if len(payload.items) > DEMO_MAX_ITEMS:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Otimização limitada a {DEMO_MAX_ITEMS} itens nesta demonstração.",
+        )
+    for field in ("demand_by_wsn", "wsn_max_people", "wsn_max_hours", "wsn_max_turnos",
+                  "person_availability_pct", "forced_pair_headcount", "direct_pair_headcount",
+                  "fixed_pair_ot_pct", "max_pair_pct", "max_pair_ot_pct"):
+        if len(getattr(payload, field, {}) or {}) > DEMO_MAX_MAP_ENTRIES:
+            raise HTTPException(
+                status_code=413,
+                detail=f"Parâmetro '{field}' excede o limite desta demonstração.",
+            )
+
+    # ── DEPTH: one at a time, process-wide ──
+    active = [jid for jid, j in jobs.items() if (j or {}).get("status") in _ACTIVE_JOB_STATES]
+    if active:
+        raise HTTPException(
+            status_code=429,
+            detail="Já existe uma otimização em andamento. Esta demonstração executa uma por vez.",
+        )
+
+    # ── INTERVAL: per caller ──
+    key = _demo_caller_key(request, user)
+    now = _utime.monotonic()
+    with _demo_start_lock:
+        last = _demo_last_start.get(key, 0.0)
+        wait = DEMO_MIN_INTERVAL_S - (now - last)
+        if wait > 0:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Aguarde {int(wait) + 1}s antes de iniciar outra otimização.",
+            )
+        _demo_last_start[key] = now
+        # The map is unbounded only in theory: one entry per client address, dropped once it is
+        # older than the cooldown it exists to enforce.
+        for k, t in list(_demo_last_start.items()):
+            if now - t > DEMO_MIN_INTERVAL_S * 4:
+                _demo_last_start.pop(k, None)
+
+    # ── TIME: the server decides, whatever the client asked for ──
+    payload.time_limit_s = min(float(payload.time_limit_s or DEMO_TIME_LIMIT_S), DEMO_TIME_LIMIT_S)
+    payload.phase_limit = max(1, min(int(payload.phase_limit or 6), 6))
+
+
 @app.post("/api/optimize")
 async def start_optimization(
     payload: OptimizationPayload,
     background_tasks: BackgroundTasks,
+    request: Request,
     _user: dict = Depends(require_auth),
 ):
-    # Authorization: running the solver is an Editor+ action (Readers are view-only and
-    # cannot import the items an optimization runs on). _current_role is defined later in
-    # the module; the name resolves at call time, so the forward reference is fine.
-    if _current_role(_user) not in ("editor", "admin"):
-        raise HTTPException(status_code=403, detail="Permissão de edição necessária.")
+    _enforce_demo_solver_limits(payload, request, _user)
     if payload.solver_backend.lower() == "gurobi":
         chk = check_gurobi()
         if not chk.get("available", False):
@@ -1481,7 +1533,6 @@ async def start_optimization(
         "error":    None,
         "log":      [f"[SETUP] Job {job_id} recebido (backend={payload.solver_backend})."],
     }
-    _persist_job(job_id)
     # Write to DB in a thread so we don't block the event loop.
     # This makes the job visible to _load_job on any worker even before the WS connects.
     import threading as _threading
@@ -1492,13 +1543,9 @@ async def start_optimization(
 
 @app.delete("/api/optimize/{job_id}")
 def cancel_job(job_id: str, _user: dict = Depends(require_auth)):
-    # Authorization: cancelling is an Editor+ action, mirroring POST /api/optimize above —
-    # only the roles that can START a run may stop one. This endpoint mutates job state and
-    # persists it, so a Reader reaching it could kill any Editor's in-flight optimization
-    # just by guessing/observing a job id. Readers are view-only (see the Reader read-only
-    # scenario mode: load/compare/simulate are reads; every write path stays Editor+).
-    if _current_role(_user) not in ("editor", "admin"):
-        raise HTTPException(status_code=403, detail="Permissão de edição necessária.")
+    # No role check, deliberately: with one shared account there is no second user whose run
+    # this could kill, and the run it does kill is the one occupying the single slot the demo
+    # allows. Cancelling has to stay at least as reachable as starting.
     if job_id not in jobs:
         persisted = _load_job(job_id)
         if persisted is not None:
@@ -1506,7 +1553,6 @@ def cancel_job(job_id: str, _user: dict = Depends(require_auth)):
     if job_id in jobs:
         jobs[job_id]["status"] = "cancelled"
         jobs[job_id]["message"] = "Execução cancelada pelo usuário."
-        _persist_job(job_id)
         import threading as _t; _t.Thread(target=_persist_job_to_db, args=(job_id,), daemon=True).start()
         stop_ev = jobs[job_id].get("_stop_event")
         if stop_ev is not None:
