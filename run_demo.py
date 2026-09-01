@@ -41,6 +41,23 @@ def main() -> int:
     ap.add_argument("--api-port", type=int, default=int(os.getenv("API_PORT", "8000")))
     args = ap.parse_args()
 
+    # Preflight, in the order a first run fails. Each check names the command that fixes it:
+    # the alternative is a traceback from three directories away, which is a worse way to learn
+    # that a step was skipped.
+    py = backend_python()
+    probe = subprocess.run([py, "-c", "import fastapi, uvicorn, sqlalchemy, pandas"],
+                           capture_output=True, text=True)
+    if probe.returncode != 0:
+        missing = probe.stderr.strip().splitlines()[-1] if probe.stderr else "dependência ausente"
+        print(f"[demo] {py}")
+        print(f"[demo] {missing}")
+        print("[demo] Instale as dependências do backend:")
+        print("[demo]   python -m venv backend/venv")
+        print("[demo]   backend/venv/Scripts/pip install -r backend/requirements.txt"
+              if os.name == "nt" else
+              "[demo]   backend/venv/bin/pip install -r backend/requirements.txt")
+        return 1
+
     if not (BACKEND / "data" / "demo.sqlite").is_file():
         print("[demo] backend/data/demo.sqlite não existe.")
         print("[demo] Gere-o com:  python tools/make_demo_data.py && python tools/seed_demo_db.py")
@@ -59,7 +76,7 @@ def main() -> int:
         # uvicorn is invoked through `python -c` rather than `python -m uvicorn`: its click CLI
         # expands any argument containing '*' as a filesystem glob on Windows.
         api = subprocess.Popen(
-            [backend_python(), "-c",
+            [py, "-c",
              f"import uvicorn; uvicorn.run('main:app', host='127.0.0.1', port={args.api_port})"],
             cwd=str(BACKEND), env=env,
         )

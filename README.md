@@ -71,15 +71,29 @@ across restarts; leaving it unset generates one per boot, which is the right def
 
 ### From source
 
+Needs Python 3.14 and Node 22.
+
 ```bash
-# once
+# once — backend dependencies into a venv run_demo.py finds on its own
+python -m venv backend/venv
+backend/venv/Scripts/pip install -r backend/requirements.txt   # Windows
+# backend/venv/bin/pip install -r backend/requirements.txt     # macOS / Linux
+
+# once — the frontend build
 cd frontend && npm ci && npm run build && cd ..
-python -m pip install -r backend/requirements.txt
-python tools/make_demo_data.py && python tools/seed_demo_db.py
+
+# once — the dataset and the database it seeds (both are committed, so this is
+# only needed after changing tools/make_demo_data.py)
+backend/venv/Scripts/python tools/make_demo_data.py
+backend/venv/Scripts/python tools/seed_demo_db.py
 
 # every time
 python run_demo.py            # http://127.0.0.1:3000 — localhost only
 ```
+
+`run_demo.py` uses `backend/venv` when it exists and whatever interpreter started it otherwise.
+It checks its prerequisites before starting anything and names the command that fixes each one,
+so a missing step is a one-line message rather than a traceback.
 
 `run_demo.py` binds `127.0.0.1` unless you pass `--host`. That default is the point: running it
 on a laptop should not put the app on whatever network the laptop is joined to.
