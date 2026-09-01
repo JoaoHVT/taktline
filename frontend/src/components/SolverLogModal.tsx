@@ -15,6 +15,7 @@
 import { useEffect, useRef, useCallback, useMemo } from 'react'
 import { X, Square, Terminal, CheckCircle, AlertTriangle } from 'lucide-react'
 import type { Job, OptimizationResult } from '@/lib/api'
+import { InfoDot } from '@/components/InfoDot'
 
 // ── Log line colorizer ────────────────────────────────────────────────────────
 
@@ -272,7 +273,10 @@ export function SolverLogModal({ job, onClose, onCancelRunning, onDone }: Props)
         <div className="flex items-center justify-between px-4 py-2.5 bg-[#1a1a2e] shrink-0 border-b border-white/10">
           <div className="flex items-center gap-2 text-white">
             <Terminal size={15} className="text-green-400" />
-            <span className="font-semibold text-sm">Gurobi Solver — Log de Execução</span>
+            <span className="font-semibold text-sm inline-flex items-center gap-1.5">
+              Gurobi Solver — Log de Execução
+              <InfoDot topic="lexfix" className="!border-white/30 !text-white/60 hover:!border-white hover:!text-white" />
+            </span>
             {isRunning && (
               <span className="flex items-center gap-1 text-[11px] text-yellow-300 ml-2">
                 <span className="inline-block w-1.5 h-1.5 rounded-full bg-yellow-400 animate-ping" />

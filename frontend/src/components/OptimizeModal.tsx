@@ -12,6 +12,7 @@ import { useState } from 'react'
 import {
   X, Play, BarChart2, ChevronLeft, AlertTriangle, ChevronDown, ChevronUp, GraduationCap,
 } from 'lucide-react'
+import { InfoDot } from '@/components/InfoDot'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -171,6 +172,7 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
           )}
           <span className="font-semibold text-sm text-white tracking-wide">
             {step === 'mode' ? 'Otimização' : step === 'confirm' ? 'Confirmar Otimização' : 'Parâmetros do Solver'}
+            <InfoDot topic="objective" className="ml-2" />
           </span>
           <button
             onClick={onClose}

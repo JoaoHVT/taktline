@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { CalendarRange, Gauge, LogOut } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { InfoDot } from '@/components/InfoDot'
 import { useAuth } from '@/hooks/useAuth'
 
 interface Props {
@@ -64,7 +65,10 @@ export function HomeView({ onOpenAnalise, onOpenGantt }: Props) {
 
       <div className="w-full h-full flex flex-col items-center justify-center px-6">
         <div className="mb-10 text-center">
-          <h1 className="text-3xl font-semibold tracking-tight">Taktline</h1>
+          <h1 className="text-3xl font-semibold tracking-tight inline-flex items-center gap-2">
+            Taktline
+            <InfoDot topic="home" className="!border-white/30 !text-white/50 hover:!border-white hover:!text-white" />
+          </h1>
           <p className="mt-2 text-sm text-white/50">
             Planejamento de capacidade e sequenciamento de produção.
           </p>
@@ -82,6 +86,32 @@ export function HomeView({ onOpenAnalise, onOpenGantt }: Props) {
               <div className="mt-4 text-base font-semibold">{m.title}</div>
               <div className="mt-1.5 text-xs leading-relaxed text-white/45">{m.desc}</div>
             </button>
+          ))}
+        </div>
+
+        {/* ── What is being solved underneath ──────────────────────────────────
+            The remaining cards live here rather than beside the controls they describe.
+            Anchoring each one inside the Schedule toolbar would mean restructuring a layout
+            that is already dense to hold a 15px dot; here they are all reachable, in reading
+            order, before the visitor opens anything — which is when the framing is worth
+            most to someone who has never seen this app. */}
+        <div className="mt-12 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 max-w-2xl">
+          <span className="text-[10px] uppercase tracking-widest text-white/25">Como funciona</span>
+          {([
+            ['takt',       'Takt'],
+            ['propagation','Propagação'],
+            ['protection', 'Dias de proteção'],
+            ['objective',  'O modelo'],
+            ['capacity',   'Capacidade'],
+            ['expertise',  'Expertise'],
+          ] as const).map(([topic, label]) => (
+            <span key={topic} className="inline-flex items-center gap-1.5 text-[11px] text-white/45">
+              {label}
+              <InfoDot
+                topic={topic}
+                className="!border-white/25 !text-white/40 hover:!border-white hover:!text-white"
+              />
+            </span>
           ))}
         </div>
       </div>
