@@ -29,7 +29,7 @@
  * sessionStorage and not a module variable, precisely because the reload wipes module state.
  */
 
-const RELOAD_STAMP_KEY = 'optvision.staleBuildReloadAt'
+const RELOAD_STAMP_KEY = 'taktline.staleBuildReloadAt'
 /** A reload that fixed the problem is followed by no second error at all, so anything inside
  *  this window is evidence the reload did NOT help. Generous enough to cover a slow cold start
  *  behind the new document. */
@@ -85,7 +85,7 @@ export function reloadForStaleBuild(): boolean {
  * The message used to be withheld here on the grounds that it can carry a backend detail
  * string. That reasoning does not survive contact with the problem it created: the backend
  * already scrubs its own details before they leave it (see the error scrubbing in main.py), the
- * app is behind Azure AD and reachable only by @wabtec accounts, and with nothing but an opaque
+ * app is behind Azure AD and reachable only by accounts in one email domain, and with nothing but an opaque
  * `digest` on screen a crash reported by a user is not diagnosable at all — which is precisely
  * how a reproducible failure went a full day without a name. The stack is trimmed to its first
  * frames: that is where the throwing component is, and the rest is bundler noise.

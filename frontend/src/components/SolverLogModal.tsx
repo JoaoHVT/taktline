@@ -1,7 +1,7 @@
 /**
  * SolverLogModal — live Gurobi solver log terminal.
  *
- * Mirrors the QPlainTextEdit progress dialog from CapB3356103.py:
+ * Mirrors the QPlainTextEdit progress dialog from the original desktop tool:
  *   - Dark terminal background with monospace log lines
  *   - Real-time progress bar
  *   - Phase lines highlighted in yellow, DONE lines in green, errors in red

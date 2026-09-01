@@ -9,7 +9,7 @@ import { quizSourceTag } from '@/lib/expertise'
 // Internal request flag: marks background pollers' own requests (health probe, admin
 // online-users / alerts) so they're excluded from the "real traffic" liveness signal
 // below. Otherwise a poll would look like user activity and perpetuate itself, holding
-// the backend awake and defeating Railway's sleep.
+// the backend awake and defeating the host's sleep.
 declare module 'axios' {
   interface AxiosRequestConfig {
     _backgroundPoll?: boolean
@@ -30,12 +30,12 @@ export const api = axios.create({
 
 // Attach Azure ID token to every request when the user is authenticated, plus the
 // admin second-factor "unlock" grant (harmless on non-sensitive endpoints; required
-// by downloads/exports/Denodo/user-management). The server ignores the unlock header
+// by downloads and exports). The server ignores the unlock header
 // where it isn't needed and enforces it where it is.
 api.interceptors.request.use(config => {
   // ── Quiet-mode backstop ────────────────────────────────────────────────────
   // While the admin has the server switched off, no BACKGROUND request may leave the
-  // browser: every one of them resets Railway's 10-minute idle timer, and the timer has
+  // browser: every one of them resets the host's 10-minute idle timer, and the timer has
   // to run out for the container to sleep. Each poller already gates itself on
   // shouldPollNow/shouldPollOrActive; this is the net underneath, so a poller added later
   // (or one that slips past its gate on a race) cannot silently hold the server awake.
@@ -91,7 +91,7 @@ function _isTransientNetworkError(err: AxiosError): boolean {
 // backend is reachable. We record the moment and notify listeners, so the header
 // status dots / admin indicators can show the TRUE state when the app is actively
 // used outside working hours (when idle polling is otherwise suppressed to let
-// Railway sleep). Background pollers' own requests are excluded (config._backgroundPoll)
+// the host sleep). Background pollers' own requests are excluded (config._backgroundPoll)
 // so they can't perpetuate themselves and hold the backend awake.
 let _lastBackendContactAt = 0
 const _contactListeners = new Set<() => void>()
@@ -275,11 +275,6 @@ api.interceptors.response.use(
 
 // ── Tipos — Excel / Ingestão ─────────────────────────────────────
 
-export interface ExcelFilters {
-  ano?:    number
-  mes?:    number
-  escopo?: string
-}
 
 export interface HeadcountInfo {
   people: string[]
@@ -363,24 +358,7 @@ export interface PersonResultRow {
   wsns:            string[]
 }
 
-/** Legacy shape kept for compatibility with WsnResult references */
-export interface WsnResult {
-  wsn:       string
-  demand:    number
-  capacity:  number
-  unmet:     number
-  util:      number
-  bottleneck: boolean
-  overtime:  number
-  people:    PersonAllocation[]
-}
 
-export interface PersonAllocation {
-  person: string
-  normal: number
-  overtime: number
-  total: number
-}
 
 export interface PhaseMetric {
   phase: number
@@ -474,7 +452,7 @@ export function connectJobWebSocket(
 ): WebSocket {
   // The backend validates auth on the WS channel too. Browsers can't set an
   // Authorization header on a WebSocket, so the token travels as a ?token= query
-  // param (backend rejects anonymous/invalid/non-Wabtec connections with 1008).
+  // param (backend rejects anonymous/invalid/non-Taktline connections with 1008).
   const token = getToken()
   const qs = token ? `?token=${encodeURIComponent(token)}` : ''
   const ws = new WebSocket(`${WS_URL}/ws/${job_id}${qs}`)
@@ -506,39 +484,7 @@ export function connectJobWebSocket(
 
 // ── Excel / Ingestão ─────────────────────────────────────────────
 
-export async function uploadExcel(
-  file: File,
-  filters?: ExcelFilters,
-): Promise<ExcelData> {
-  const formData = new FormData()
-  formData.append('file', file)
 
-  const params = new URLSearchParams()
-  if (filters?.ano    != null) params.append('ano',    String(filters.ano))
-  if (filters?.mes    != null) params.append('mes',    String(filters.mes))
-  if (filters?.escopo)         params.append('escopo', filters.escopo)
-
-  // Use the shared `api` instance (NOT raw axios) so the 401 → silent refresh →
-  // retry-once interceptor recovers an expired/invalid token automatically. The
-  // FormData body is re-sent unchanged on retry, preserving the file + filters.
-  const res = await api.post<ExcelData>(
-    `/api/upload-excel?${params}`,
-    formData,
-    { headers: { 'Content-Type': 'multipart/form-data' }, timeout: 60000 },
-  )
-  return res.data
-}
-
-export async function loadExcelPreview(filters?: ExcelFilters): Promise<ExcelData> {
-  const res = await api.get<ExcelData>('/api/excel-preview', {
-    params: {
-      ...(filters?.ano    != null ? { ano:    filters.ano }    : {}),
-      ...(filters?.mes    != null ? { mes:    filters.mes }    : {}),
-      ...(filters?.escopo         ? { escopo: filters.escopo } : {}),
-    },
-  })
-  return res.data
-}
 
 // ── Importação de itens do plano mensal ──────────────────────────
 
@@ -615,7 +561,7 @@ export interface ExcelItemsResponse {
   filter_options: ImportFilterOptions
   /** Maps numeric month (2, 3, 4…) → sorted list of FW strings for that month.
    *  Built on the backend after the ANO filter, before the MES filter —
-   *  identical logic to _list_available_fw_values() in CapB3356103.py. */
+   *  identical logic to _list_available_fw_values() in the original desktop tool. */
   mes_fw_map:     Record<number, string[]>
   items:          ImportItem[]
 }
@@ -820,143 +766,18 @@ export async function checkGurobi(): Promise<GurobiCheckResult> {
 
 // ── DB import ─────────────────────────────────────────────────────────────────
 
-/** 'replace' rebuilds the base from the file (historic behaviour); 'append' keeps the
- *  current rows and adds only the file's new ones (identical records are ignored). */
-export type DbImportMode = 'replace' | 'append'
 
-export interface DbImportJob {
-  job_id: string
-  status: string
-}
 
-export interface DbImportStatus {
-  status:    'running' | 'done' | 'error' | 'cancelled'
-  logs:      string[]
-  /** `added` / `duplicates` / `carried` are only present for append imports. */
-  result:    {
-    status: string; message: string; rows: number
-    mode?: DbImportMode; added?: number; duplicates?: number; carried?: number
-  } | null
-  error:     string | null
-  table_key: string
-}
 
-/**
- * Starts a background import of an Excel file. Returns immediately with a
- * job_id; poll getDbImportStatus() for progress and completion.
- */
-export async function importExcelToDb(file: File, password: string, mode: DbImportMode = 'replace'): Promise<DbImportJob> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('password', password)
-  formData.append('mode', mode)
 
-  const res = await api.post<DbImportJob>('/api/db/import', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    // Upload-only timeout: covers the multipart upload of a potentially large
-    // .xlsx. The actual import runs in a background job (polled separately), so
-    // this only needs to be long enough to finish the file transfer.
-    timeout: 120_000,
-  })
-  return res.data
-}
 
-export async function importScheduleToDb(file: File, password: string, mode: DbImportMode = 'replace'): Promise<DbImportJob> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('password', password)
-  formData.append('mode', mode)
 
-  const res = await api.post<DbImportJob>('/api/db/import/schedule', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    // Upload-only timeout: covers the multipart upload of a potentially large
-    // .xlsx. The actual import runs in a background job (polled separately), so
-    // this only needs to be long enough to finish the file transfer.
-    timeout: 120_000,
-  })
-  return res.data
-}
 
-export async function importLocosRoutToDb(file: File, password: string, mode: DbImportMode = 'replace'): Promise<DbImportJob> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('password', password)
-  formData.append('mode', mode)
 
-  const res = await api.post<DbImportJob>('/api/db/import/locos-rout', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    // Upload-only timeout: covers the multipart upload of a potentially large
-    // .xlsx. The actual import runs in a background job (polled separately), so
-    // this only needs to be long enough to finish the file transfer.
-    timeout: 120_000,
-  })
-  return res.data
-}
 
-export async function importItensRoutToDb(file: File, password: string, mode: DbImportMode = 'replace'): Promise<DbImportJob> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('password', password)
-  formData.append('mode', mode)
-  const res = await api.post<DbImportJob>('/api/db/import/itens-rout', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120_000,
-  })
-  return res.data
-}
 
-export async function importPlanoProdToDb(file: File, password: string, mode: DbImportMode = 'replace'): Promise<DbImportJob> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('password', password)
-  formData.append('mode', mode)
-  const res = await api.post<DbImportJob>('/api/db/import/plano-prod', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120_000,
-  })
-  return res.data
-}
 
-export async function getDbImportStatus(jobId: string): Promise<DbImportStatus> {
-  const res = await api.get<DbImportStatus>(`/api/db/import/status/${jobId}`)
-  return res.data
-}
 
-export async function cancelDbImport(jobId: string): Promise<void> {
-  await api.post(`/api/db/import/cancel/${jobId}`)
-}
-
-export interface DbTablesStatus {
-  available: boolean
-  tables: {
-    monthly_demand?: { rows: number; label: string }
-    schedule?:       { rows: number; label: string }
-    locos_rout?:     { rows: number; label: string }
-  }
-  error?: string
-}
-
-export async function getDbTables(): Promise<DbTablesStatus> {
-  const res = await api.get<DbTablesStatus>('/api/db/tables')
-  return res.data
-}
-
-export interface DbLastUpdate {
-  available: boolean
-  found: boolean
-  /** ISO timestamp of the most recent import/rebuild or schedule edit. */
-  ts?: string
-  /** Username (e-mail local-part) of who performed it. */
-  actor?: string | null
-  /** 'import' = Excel import/rebuild · 'edit' = targeted edit / schedule edit. */
-  kind?: 'import' | 'edit' | null
-}
-
-/** Latest update (who + when) for a managed dataset — powers the "Última atualização" card. */
-export async function getDbLastUpdate(key: string): Promise<DbLastUpdate> {
-  const res = await api.get<DbLastUpdate>(`/api/db/last-update/${encodeURIComponent(key)}`)
-  return res.data
-}
 
 // ── Gantt ─────────────────────────────────────────────────────────────────────
 
@@ -1049,7 +870,7 @@ export interface GanttData {
   /** Mode-1 optimization metadata, embedded by the optimize stream on the result. */
   _optimization?: {
     /** LOCO keys "wo||task_name" whose WS40↔WS50 order the optimizer swapped
-     *  (ES44 swap is evaluated automatically in every strategy). */
+     *  (MX10 swap is evaluated automatically in every strategy). */
     swapped_locos?: string[]
     /** True when this optimization ran with "Permitir regras de sobreposição" — a
      *  boundary handoff on WS40/WS50 (max 2 LOCOs) is not counted as a conflict. */
@@ -1063,16 +884,6 @@ export async function getGanttData(): Promise<GanttData> {
   return res.data
 }
 
-export async function optimizeGanttConflicts(): Promise<GanttData> {
-  try {
-    const res = await api.post<GanttData>('/api/gantt/optimize-conflicts', {}, { timeout: 180000 })
-    return res.data
-  } catch (err: unknown) {
-    const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-    if (detail) throw new Error(detail)
-    throw err
-  }
-}
 
 /** One manual LOCO edit (session-only). Absent fields = leave unchanged.
  *  takt: nova duração (0,5–15, passos de 0,5; decimais preservados) · startShift/finishShift: dias úteis −10..+10. */
@@ -1097,34 +908,7 @@ export async function editLocos(edits: LocoEdit[]): Promise<GanttData> {
   }
 }
 
-/** Result of a manual WS40↔WS50 swap request. `ok:false` carries a machine `reason`
- *  ('not_es44' | 'missing_ws' | 'bad_dates' | 'interleaved') the caller maps to a message. */
-export interface SwapWsResult {
-  ok: boolean
-  reason?: string
-  ws40_days?: string[]
-  ws50_days?: string[]
-}
 
-/** Compute the WS40↔WS50 execution-order swap for one ES44 LOCO, reusing the optimizer's
- *  own eligibility + reorder rules server-side. Posts the LOCO's CURRENT WS40/WS50 day-cells;
- *  returns the reordered day-sets, or {ok:false, reason} when ineligible/interleaved.
- *  Stateless — persistence is the caller's normal override path. */
-export async function swapWs(input: {
-  wo: string; taskName: string; linha: string; ws40Days: string[]; ws50Days: string[]
-}): Promise<SwapWsResult> {
-  try {
-    const res = await api.post<SwapWsResult>('/api/gantt/swap-ws', {
-      wo: input.wo, task_name: input.taskName, linha: input.linha,
-      ws40_days: input.ws40Days, ws50_days: input.ws50Days,
-    })
-    return res.data
-  } catch (err: unknown) {
-    const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-    if (detail) throw new Error(detail)
-    throw err
-  }
-}
 
 export interface OptStreamEvent {
   type: 'log' | 'result' | 'error'
@@ -1148,7 +932,7 @@ export interface OptScopeFilter {
   /** Client "Today" (ISO yyyy-mm-dd). Workstations before it are immutable for the
    *  optimizer (historical schedule preserved). Defaults to the local date. */
   today?: string
-  /** Modo 1 shift strategy: whole LOCO, or only conflicting WS + successors. The ES44
+  /** Modo 1 shift strategy: whole LOCO, or only conflicting WS + successors. The MX10
    *  WS40↔WS50 swap is NOT a strategy — the optimizer evaluates it automatically in both. */
   strategy?: 'shift_full' | 'shift_conflict_only'
   /** Allow scheduling WS40/WS50 of conflicting LOCOs on Saturdays. */
@@ -1252,108 +1036,22 @@ export async function optimizeGanttConflictsStreaming(
   throw new Error('Stream encerrado sem resultado.')
 }
 
-export async function postGanttScenario(file: File): Promise<GanttData> {
-  const form = new FormData()
-  form.append('file', file)
-  const res = await api.post<GanttData>('/api/gantt/scenario', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120000,
-  })
-  return res.data
-}
 
-export interface GanttExportParams {
-  from?: string
-  to?: string
-  lines?: string[]
-}
 
-export async function exportGanttExcel(params: GanttExportParams = {}): Promise<ArrayBuffer> {
-  const res = await api.get<ArrayBuffer>('/api/gantt/export', {
-    responseType: 'arraybuffer',
-    timeout: 180000,
-    params: {
-      ...(params.from ? { from: params.from } : {}),
-      ...(params.to ? { to: params.to } : {}),
-      ...(params.lines && params.lines.length > 0 ? { lines: params.lines.join(',') } : {}),
-    },
-  })
-  return res.data
-}
 
-export async function exportGanttScenario(scenarioId: string, params: GanttExportParams = {}): Promise<ArrayBuffer> {
-  const res = await api.get<ArrayBuffer>(`/api/gantt/export-scenario/${scenarioId}`, {
-    responseType: 'arraybuffer',
-    timeout: 180000,
-    params: {
-      ...(params.from ? { from: params.from } : {}),
-      ...(params.to ? { to: params.to } : {}),
-      ...(params.lines && params.lines.length > 0 ? { lines: params.lines.join(',') } : {}),
-    },
-  })
-  return res.data
-}
 
-/**
- * Export the Schedule Excel from the EXACT data currently displayed (effectiveData)
- * honoring the active view mode (FULL/WORK/LOCO). Matches the on-screen Gantt 1:1
- * including optimization/scenario shifts and Saturday boxes, with all UI-only overlays
- * excluded. Sends only the fields the renderer needs (keeps the payload lean).
- */
-export async function exportGanttView(
-  data: GanttData,
-  mode: 'full' | 'ws' | 'loco',
-  colorByWs = true,
-): Promise<ArrayBuffer> {
-  const groups = data.groups.map(g => ({
-    linha: g.linha, wo: g.wo, task_name: g.task_name, start_ms: g.start_ms ?? null,
-    workstations: g.workstations.map(w => ({
-      ws: w.ws, subarea: w.subarea ?? '',
-      desc_rows: w.desc_rows.map(dr => ({ desc: dr.desc, cells: dr.cells })),
-    })),
-  }))
-  const date_info = data.date_info.map(d => ({
-    iso: d.iso, label: d.label, dow: d.dow, fw: d.fw, is_weekend: d.is_weekend,
-  }))
-  const res = await api.post<ArrayBuffer>(
-    '/api/gantt/export-view',
-    { groups, date_info, mode, colorByWs },
-    { responseType: 'arraybuffer', timeout: 300000 },
-  )
-  return res.data
-}
 
-// ── Denodo ───────────────────────────────────────────────────────
 
-export interface DenodoDataset {
-  key:   string
-  label: string
-  icon:  string
-  /** Whether this base honors the standardized date-range filter. */
-  date?: boolean
-  /** Whether this base honors the standardized multi-org (GCM/GCR/GCT) filter. */
-  org?:  boolean
-}
 
-/** Standardized Denodo filters — applied to whichever dimension each base supports.
- *  Dates are ISO (yyyy-mm-dd); the backend fills open boundaries (see run_dataset_data). */
-export interface DenodoFilters {
-  startDate?: string
-  endDate?:   string
-  orgs?:      string[]
-  /** User-chosen row limit (1..50000). Blank UI field ⇒ 50000. The server clamps to
-   *  its own MAX_ROWS_CAP regardless, so this can never exceed backend protections. */
-  maxRows?:   number
-}
 
-/** True when a request failed because the caller aborted it (e.g. ESC during a Denodo
+/** True when a request failed because the caller aborted it (e.g. ESC during a long
  *  load) — callers treat this as a silent cancel, never as an error to display. */
 export function isRequestCancelled(err: unknown): boolean {
   return axios.isCancel(err)
 }
 
 /** Extract a friendly message from an axios error (FastAPI `detail` field). */
-function denodoErrorMessage(err: unknown, fallback: string): string {
+function warehouseErrorMessage(err: unknown, fallback: string): string {
   const ax = err as AxiosError<{ detail?: string }>
   const detail = ax?.response?.data?.detail
   if (typeof detail === 'string' && detail.trim()) return detail
@@ -1362,162 +1060,21 @@ function denodoErrorMessage(err: unknown, fallback: string): string {
   return fallback
 }
 
-/**
- * Validate Denodo credentials and return the available datasets.
- * Credentials are sent per request and never stored server-side.
- */
-export async function denodoConnect(user: string, password: string, signal?: AbortSignal): Promise<DenodoDataset[]> {
-  try {
-    const res = await api.post<{ ok: boolean; datasets: DenodoDataset[] }>(
-      '/api/denodo/connect',
-      { user, password },
-      { timeout: 60000, signal },
-    )
-    return res.data.datasets
-  } catch (err) {
-    if (axios.isCancel(err)) throw err   // user-initiated abort — preserve, don't wrap
-    throw new Error(denodoErrorMessage(err, 'Falha ao conectar ao Denodo.'))
-  }
-}
 
-/** Run a Denodo dataset query and return the generated HTML page. */
-export async function denodoRunDataset(
-  key: string,
-  user: string,
-  password: string,
-): Promise<string> {
-  try {
-    const res = await api.post<{ ok: boolean; html: string }>(
-      '/api/denodo/dataset',
-      { key, user, password },
-      { timeout: 180000 },
-    )
-    return res.data.html
-  } catch (err) {
-    throw new Error(denodoErrorMessage(err, 'Falha ao executar a consulta no Denodo.'))
-  }
-}
 
-/** Semantic type of a Denodo column — drives the grid's per-column filter UI. */
-export type DenodoColumnType = 'number' | 'date' | 'text'
 
-/** A single value cell: number, ISO-string (text/date) or null (blank). */
-export type DenodoCell = number | string | null
 
-export interface DenodoMetaPill { label: string; value: string }
 
-/** Structured result of a Denodo dataset — everything the in-app grid needs to
- *  filter/search/sort/export locally, with no further server round-trips. */
-export interface DenodoData {
-  key: string
-  label: string
-  title: string
-  columns: string[]
-  types: DenodoColumnType[]
-  rows: DenodoCell[][]
-  meta: DenodoMetaPill[]
-  rowCount: number
-  maxRows: number
-  /** True when the row count hit the server cap (results may be partial). */
-  truncated: boolean
-  generatedAt: string
-  query: string
-}
-
-/** Run a Denodo dataset query and return the structured data payload for the
- *  Excel-like grid. Filtering/sorting/search then happen entirely client-side.
- *  `filters` carry the standardized date-range + multi-org selection; the backend
- *  applies only the dimensions the chosen base supports. */
-export async function denodoRunDatasetData(
-  key: string,
-  user: string,
-  password: string,
-  filters?: DenodoFilters,
-  signal?: AbortSignal,
-): Promise<DenodoData> {
-  try {
-    const res = await api.post<{ ok: boolean; data: DenodoData }>(
-      '/api/denodo/dataset/data',
-      {
-        key, user, password,
-        start_date: filters?.startDate || undefined,
-        end_date:   filters?.endDate || undefined,
-        orgs:       filters?.orgs && filters.orgs.length ? filters.orgs : undefined,
-        max_rows:   filters?.maxRows || undefined,
-      },
-      { timeout: 180000, signal },
-    )
-    return res.data.data
-  } catch (err) {
-    if (axios.isCancel(err)) throw err   // ESC abort — the caller handles it silently
-    throw new Error(denodoErrorMessage(err, 'Falha ao executar a consulta no Denodo.'))
-  }
-}
-
-/** Run a query the user EDITED in the results grid, returning the same payload shape as
- *  `denodoRunDatasetData` so the grid renders it unchanged.
- *
- *  The server accepts ONE read-only statement (SELECT/WITH, no DML/DDL) and runs it under
- *  the user's own Denodo credentials — it can reach nothing that user could not already
- *  read directly. A rejected statement comes back as a 400 with a user-facing reason. */
-export async function denodoRunQuery(
-  query: string,
-  user: string,
-  password: string,
-  opts?: { maxRows?: number; label?: string },
-  signal?: AbortSignal,
-): Promise<DenodoData> {
-  try {
-    const res = await api.post<{ ok: boolean; data: DenodoData }>(
-      '/api/denodo/query',
-      { query, user, password, max_rows: opts?.maxRows || undefined, label: opts?.label || undefined },
-      { timeout: 180000, signal },
-    )
-    return res.data.data
-  } catch (err) {
-    if (axios.isCancel(err)) throw err   // ESC abort — the caller handles it silently
-    throw new Error(denodoErrorMessage(err, 'Falha ao executar a consulta no Denodo.'))
-  }
-}
 
 // ── Horas Transacionadas — load & persist (phase 1) ──────────────────────────
-// Pull the actual-hours snapshot from Denodo once and store it in our own DB, so the
-// display layer works in sessions with no Denodo access.
+// Pull the actual-hours snapshot from the warehouse once and store it in our own DB, so the
+// display layer works in sessions with no warehouse access.
 //
 // Both preview and save require the ADMIN unlock grant (sent automatically by the request
 // interceptor once the user has unlocked); save additionally carries IMPORT_PASSWORD as
 // `importPassword`. Two different secrets — do not collapse them.
 
-export interface TransactedHoursStats {
-  row_count:                     number
-  total_hours:                   number
-  txn_count:                     number
-  workorder_count:               number
-  workstation_count:             number
-  part_number_count:             number
-  dropped_blank_workorder_rows:  number
-  dropped_blank_workorder_hours: number
-  workstations:                  { workstation: string; hours: number }[]
-  workorder_sample:              string[]
-}
 
-export interface TransactedHoursPreview {
-  /** Rendered by DenodoResultsModal — the SAME grid every Denodo base uses. The server
-   *  emits this in DenodoData shape precisely so no parallel preview UI is needed. */
-  data:  DenodoData
-  /** Condensed figures the save step gates on (row_count === 0 blocks the write). Also
-   *  mirrored into `data.meta` pills, which is where the user actually reads them. */
-  stats: TransactedHoursStats
-  /** Per-loco rollup folded from EVERY row of the result (not the 100-row grid sample),
-   *  present only when the caller supplied the loaded locos. This is what lets the main
-   *  page show the hours before the write — carries `pending: true`. */
-  rollup?: TransactedHoursRollup
-  /** Opaque name for the summary the SERVER built for this prévia and still holds. Passing
-   *  it to the save lets the server reuse that result instead of reading the warehouse a
-   *  second time. It carries no data: the rows never leave the server, so this can only
-   *  make the save faster, never change what gets stored. */
-  preview_token?: string
-}
 
 export interface TransactedHoursStatus {
   has_data:     boolean
@@ -1538,17 +1095,6 @@ export interface TransactedHoursStatus {
   truncated?:   boolean
 }
 
-export interface TransactedHoursSaved {
-  batch_id:            number
-  row_count:           number
-  total_hours:         number
-  superseded_batches:  number
-  truncated:           boolean
-  /** Version now stored — becomes the next save's `baseVersion`. */
-  version?:            number
-  /** True when the save reused the prévia's server-held result instead of re-querying. */
-  reused_preview?:     boolean
-}
 
 /**
  * One locomotive the rollup may attribute hours to.
@@ -1576,77 +1122,7 @@ export interface TransactedHoursScope {
   typeWs?: Record<string, string[]>
 }
 
-/** Build the summary from Denodo WITHOUT persisting it. Editor+ (no second factor). */
-export async function transactedHoursPreview(
-  user: string,
-  password: string,
-  filters?: DenodoFilters,
-  signal?: AbortSignal,
-  /** Locos loaded on the main page. Supplying them makes the response carry `rollup`, so
-   *  the prévia can be applied to the display before anything is persisted. */
-  scope?: TransactedHoursScope,
-): Promise<TransactedHoursPreview> {
-  try {
-    const res = await api.post<{ ok: boolean; preview: TransactedHoursPreview }>(
-      '/api/transacted-hours/preview',
-      {
-        user, password,
-        start_date: filters?.startDate || undefined,
-        end_date:   filters?.endDate || undefined,
-        orgs:       filters?.orgs && filters.orgs.length ? filters.orgs : undefined,
-        max_rows:   filters?.maxRows || undefined,
-        locos:      scope?.locos.length ? scope.locos : undefined,
-        type_ws:    scope?.typeWs,
-      },
-      { timeout: 300000, signal },
-    )
-    return res.data.preview
-  } catch (err) {
-    if (axios.isCancel(err)) throw err
-    throw new Error(denodoErrorMessage(err, 'Falha ao gerar a prévia das horas transacionadas.'))
-  }
-}
 
-/** Persist the snapshot. The stored rows are ALWAYS the server's — the previewed rows are
- *  never uploaded, so nothing client-side can dictate what lands in the table.
- *
- *  `previewToken` names the result the server built for the prévia and still holds; with it
- *  the warehouse is not read again. It is bound server-side to this user and this scope, so
- *  a stale or foreign token just costs a re-query.
- *
- *  `baseVersion` is the stored version this screen loaded (from `transactedHoursStatus`).
- *  Omit it only when nothing is stored yet — against an existing snapshot the server treats
- *  absence as a conflict (409), not as consent. */
-export async function transactedHoursSave(
-  user: string,
-  password: string,
-  importPassword: string,
-  filters?: DenodoFilters,
-  signal?: AbortSignal,
-  previewToken?: string,
-  baseVersion?: number,
-): Promise<TransactedHoursSaved> {
-  try {
-    const res = await api.post<{ ok: boolean; saved: TransactedHoursSaved }>(
-      '/api/transacted-hours/save',
-      {
-        user, password,
-        import_password: importPassword,
-        start_date: filters?.startDate || undefined,
-        end_date:   filters?.endDate || undefined,
-        orgs:       filters?.orgs && filters.orgs.length ? filters.orgs : undefined,
-        max_rows:   filters?.maxRows || undefined,
-        preview_token: previewToken || undefined,
-        base_version:  baseVersion || undefined,
-      },
-      { timeout: 300000, signal },
-    )
-    return res.data.saved
-  } catch (err) {
-    if (axios.isCancel(err)) throw err
-    throw new Error(denodoErrorMessage(err, 'Falha ao salvar as horas transacionadas.'))
-  }
-}
 
 export interface TransactedHoursLocoItem {
   workstation: string
@@ -1679,28 +1155,7 @@ export interface TransactedHoursRollup {
   ambiguous?: { workorders: number; hours: number; sample: string[] }
 }
 
-/** Actual hours per locomotive, read from the STORED snapshot (no Denodo credentials, any
- *  authenticated role). Pass EVERY Tipo: attribution is decided by each loco's own routing,
- *  so restricting the scope no longer protects anything — it only hides hours. */
-export async function transactedHoursRollup(
-  scope: TransactedHoursScope,
-  signal?: AbortSignal,
-): Promise<TransactedHoursRollup> {
-  const res = await api.post<{ ok: boolean; rollup: TransactedHoursRollup }>(
-    '/api/transacted-hours/rollup',
-    { locos: scope.locos, type_ws: scope.typeWs },
-    { signal },
-  )
-  return res.data.rollup
-}
 
-/** Metadata for the stored snapshot. Any authenticated role. */
-export async function transactedHoursStatus(): Promise<TransactedHoursStatus> {
-  const res = await api.get<{ ok: boolean; status: TransactedHoursStatus }>(
-    '/api/transacted-hours/status',
-  )
-  return res.data.status
-}
 
 
 // ── Logística: the shared stored base ────────────────────────────────────────
@@ -1708,140 +1163,19 @@ export async function transactedHoursStatus(): Promise<TransactedHoursStatus> {
 // of those workbooks as the base everyone opens on; these two calls are that feature's whole
 // server surface.
 
-/** Who published the stored base and when — the header line of the Logística tab. */
-export interface LogisticaBaseMeta {
-  file_name: string
-  row_count: number
-  saved_at: string | null
-  saved_by: string | null
-}
-
-/** The stored base itself: metadata plus the SOURCE cells, which the client parses with the
- *  same function it runs on an uploaded file. */
-export interface LogisticaBasePayload extends LogisticaBaseMeta {
-  columns: string[]
-  matrix: unknown[][]
-}
-
-/**
- * How long one attempt at the stored base may take.
- *
- * Deliberately far below the client default of 30s. This lookup runs while the Logística tab
- * shows a spinner INSTEAD of its drop zone, so every second it takes is a second the user
- * cannot do the thing they opened the tab for. "No base published" is a perfectly normal
- * answer and the upload screen is a complete response to it, so failing fast costs nothing;
- * waiting does. The caller adds a hard deadline over the whole attempt — the response
- * interceptor retries a timed-out request once, which would otherwise double this.
- */
-export const LOGISTICA_BASE_TIMEOUT = 5000
-
-/** The stored base, or null when none was ever published. Any authenticated role. */
-export async function getLogisticaBase(signal?: AbortSignal): Promise<LogisticaBasePayload | null> {
-  const res = await api.get<{ base: LogisticaBasePayload | null }>(
-    '/api/logistica/base', { signal, timeout: LOGISTICA_BASE_TIMEOUT })
-  return res.data.base ?? null
-}
-
-/**
- * Publish the loaded workbook as THE Logística base, replacing whatever was stored.
- *
- * Admin only, and gated twice over on the server: the ADMIN second factor (the axios
- * interceptor obtains the X-Admin-Unlock grant if it is missing) AND the import password,
- * which is typed at the commit step and passed here. The two are different secrets.
- *
- * The timeout is generous because the body is the whole workbook — a few MB — not because the
- * server does anything slow with it.
- */
-export async function saveLogisticaBase(
-  fileName: string,
-  columns: string[],
-  matrix: unknown[][],
-  password: string,
-): Promise<LogisticaBaseMeta> {
-  const res = await api.post<{ ok: boolean; file_name: string; row_count: number }>(
-    '/api/logistica/base',
-    { file_name: fileName, columns, matrix, password },
-    { timeout: 180_000 },
-  )
-  return { ...res.data, saved_at: new Date().toISOString(), saved_by: null }
-}
 
 
-// ── SQL Server direct-access PoC (experimental, isolated from Denodo) ─────────
-// Feasibility test: connect DIRECTLY to the Wabtec warehouse via pytds and read
-// the "Horas Transacionadas" columns, bypassing Denodo/ODBC. Diagnostics only.
 
-/** One authentication attempt's outcome (sql_auth | integrated). */
-export interface MssqlPocAttempt {
-  mode: 'sql_auth' | 'integrated'
-  ok: boolean
-  durationMs: number | null
-  serverVersion: string | null
-  rowCount: number | null
-  error: string | null
-}
 
-/** Reachability probe (DNS + TCP) — runs before any auth attempt. */
-export interface MssqlPocReachability {
-  server: string
-  port: number
-  database: string
-  resolvedIp: string | null
-  tcpMs: number | null
-  reachable: boolean
-  error: string | null
-}
 
-/** Full structured diagnostics report from the PoC endpoint. */
-export interface MssqlPocReport {
-  available: boolean
-  server: string
-  port: number
-  database: string
-  table: string
-  sampleRows: number
-  period: string | null
-  reachability: MssqlPocReachability | null
-  attempts: MssqlPocAttempt[]
-  query: string
-  /** Set only for a hard, pre-probe failure (e.g. pytds not installed). */
-  error?: string
-}
+// ── SQL Server direct-access PoC (experimental) ─────────
+// Feasibility test: connect DIRECTLY to the Taktline warehouse via pytds and read
+// the "Horas Transacionadas" columns, bypassing the warehouse. Diagnostics only.
 
-export interface MssqlPocOptions {
-  table?: string
-  maxRows?: number
-  startDate?: string
-  endDate?: string
-}
 
-/** Run the isolated SQL Server feasibility probe. Credentials (for SQL auth) are
- *  sent per request and never stored; Integrated auth is attempted regardless. */
-export async function mssqlPocTest(
-  user: string,
-  password: string,
-  opts?: MssqlPocOptions,
-  signal?: AbortSignal,
-): Promise<MssqlPocReport> {
-  try {
-    const res = await api.post<{ ok: boolean; report: MssqlPocReport }>(
-      '/api/mssql-poc/transacted-hours/test',
-      {
-        user: user || undefined,
-        password: password || undefined,
-        table: opts?.table || undefined,
-        max_rows: opts?.maxRows || undefined,
-        start_date: opts?.startDate || undefined,
-        end_date: opts?.endDate || undefined,
-      },
-      { timeout: 60000, signal },
-    )
-    return res.data.report
-  } catch (err) {
-    if (axios.isCancel(err)) throw err
-    throw new Error(denodoErrorMessage(err, 'Falha ao testar o acesso direto ao SQL Server.'))
-  }
-}
+
+
+
 
 // ── In-app dataset viewer / targeted editor ───────────────────────────────────
 // Editor+ role AND the admin second factor are enforced server-side
@@ -1851,103 +1185,11 @@ export async function mssqlPocTest(
 // time by the shared application password (IMPORT_PASSWORD), prompted per download and
 // never cached — see exportDbDataset.
 
-/** Editable dataset payload — same grid shape as DenodoData plus a stable, per-row
- *  DB id (rowIds, parallel to rows) that targets INSERT/UPDATE/DELETE, and the list
- *  of required headers for new-row validation. */
-export interface DbDatasetData {
-  key: string
-  label: string
-  title: string
-  columns: string[]
-  types: DenodoColumnType[]
-  rows: DenodoCell[][]
-  rowIds: number[]
-  required: string[]
-  /** Whether this dataset accepts structural edits. False on a PROJECTION table (a window
-   *  onto another base's rows, e.g. Itens Rout · Locus) where an insert would create an
-   *  incomplete parent row and a delete would destroy the rest of it. The server refuses
-   *  them regardless; these only keep the controls off screen. Absent ⇒ allowed. */
-  allowInsert?: boolean
-  allowDelete?: boolean
-  rowCount: number
-  maxRows: number
-  truncated: boolean
-}
 
-/** A single targeted edit batch. `values` maps column name → new value; an explicit
- *  null clears the cell. Inserts may carry a client-side tempId echoed back on success. */
-export interface DbEditOps {
-  updates?: { rowId: number; values: Record<string, DenodoCell> }[]
-  inserts?: { tempId?: number; values: Record<string, DenodoCell> }[]
-  deletes?: number[]
-}
 
-export interface DbMutateResult {
-  ok: boolean
-  updated: { rowId: number; values: Record<string, DenodoCell> }[]
-  inserted: { tempId?: number; rowId: number; values: Record<string, DenodoCell> }[]
-  deleted: number[]
-  skipped: { op: string; rowId?: number; tempId?: number; reason: string; fields?: string[] }[]
-}
 
-/** Load an editable dataset (active version) for the in-app grid. */
-export async function getDbDataset(key: string): Promise<DbDatasetData> {
-  const res = await api.get<{ ok: boolean; data: DbDatasetData }>(`/api/db/dataset/${encodeURIComponent(key)}`)
-  return res.data.data
-}
 
-/**
- * Persist ONLY the changed rows (targeted insert/update/delete).
- *
- * `password` is the application import/export password (IMPORT_PASSWORD) — a SECOND,
- * distinct secret from the admin password that opened the viewer. Viewing a base and
- * changing it are separate permissions: the server validates this before touching a row,
- * and a wrong entry writes nothing.
- */
-export async function mutateDbDataset(
-  key: string, ops: DbEditOps, password: string,
-): Promise<DbMutateResult> {
-  const res = await api.post<DbMutateResult>(
-    `/api/db/dataset/${encodeURIComponent(key)}/mutate`,
-    { password, inserts: ops.inserts ?? [], updates: ops.updates ?? [], deletes: ops.deletes ?? [] },
-    { timeout: 120000 },
-  )
-  return res.data
-}
 
-/**
- * Download one dataset as xlsx. `password` is the application import/export password
- * (IMPORT_PASSWORD), validated server-side BEFORE any row is read — a wrong password
- * throws and produces no file. Pass `rowIds` to export exactly the rows currently shown
- * (filtered/sorted view), in that order; omit it to export the whole base.
- *
- * Errors arrive as a Blob (responseType), so the JSON detail is parsed back out —
- * otherwise every failure would surface as an unhelpful "[object Blob]".
- */
-export async function exportDbDataset(
-  key: string, password: string, rowIds?: number[],
-): Promise<void> {
-  try {
-    const res = await api.post(
-      `/api/db/dataset/${encodeURIComponent(key)}/export`,
-      { password, rowIds: rowIds ?? null },
-      { responseType: 'blob', timeout: 120000 },
-    )
-    const blob = res.data as Blob
-    const cd = String(res.headers?.['content-disposition'] ?? '')
-    const m = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = m ? decodeURIComponent(m[1]) : `${key}.xlsx`
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(url)
-  } catch (err) {
-    throw new Error((await blobErrorDetail(err)) ?? 'Falha ao baixar a base.')
-  }
-}
 
 /** Pull the JSON `detail` out of an axios error whose body came back as a Blob
  *  (responseType: 'blob'), falling back to the error's own message. */
@@ -1974,7 +1216,6 @@ export interface AuthSessionUser {
   email: string
   name: string
   role: UserRole
-  mustChangePassword: boolean
 }
 
 export interface AuthLoginResult {
@@ -1983,7 +1224,7 @@ export interface AuthLoginResult {
   user: AuthSessionUser
 }
 
-/** Entra com usuário + senha. O usuário pode vir como 'joao.voss' ou como e-mail completo —
+/** Entra com usuário + senha. O usuário pode vir como 'nome.sobrenome' ou como e-mail completo —
  *  o servidor normaliza para a parte antes do '@', que é a chave do cadastro. */
 export async function authLogin(username: string, password: string): Promise<AuthLoginResult> {
   const res = await api.post<AuthLoginResult>('/api/auth/login', { username, password })
@@ -1997,28 +1238,6 @@ export async function authRefresh(): Promise<AuthLoginResult> {
   return res.data
 }
 
-/** Troca a própria senha. Devolve um token novo para que a sessão siga sem re-login. */
-export async function authChangePassword(
-  currentPassword: string, newPassword: string,
-): Promise<{ ok: boolean; token: string; expiresIn: number }> {
-  const res = await api.post<{ ok: boolean; token: string; expiresIn: number }>(
-    '/api/auth/change-password', { currentPassword, newPassword },
-  )
-  return res.data
-}
-
-/** Pede acesso (quem ainda não tem conta). A senha escolhida aqui é a que vai valer quando
- *  um administrador aprovar — nada é enviado de volta por e-mail ou por outro canal.
- *
- *  Sem e-mail: o servidor o deriva do usuário (`<usuario>@<ALLOWED_DOMAIN>`), que é o único
- *  valor que o campo podia ter. `note` continua no tipo porque a rota continua aceitando —
- *  o formulário é que deixou de perguntar. */
-export async function authRequestAccess(payload: {
-  username: string; password: string; note?: string
-}): Promise<{ ok: boolean; status: string }> {
-  const res = await api.post<{ ok: boolean; status: string }>('/api/auth/request-access', payload)
-  return res.data
-}
 
 // ── User permissions (Reader / Editor / Admin) ────────────────────────────────
 export type UserRole = 'reader' | 'editor' | 'admin'
@@ -2034,7 +1253,6 @@ export interface MyPermission {
   blockedReason?: 'banned' | 'unregistered' | null
   email?: string
   /** The account still uses a password somebody else chose (migration or admin reset). */
-  mustChangePassword?: boolean
 }
 
 // Concurrent callers share ONE in-flight request. PermissionsProvider re-runs its fetch on
@@ -2055,237 +1273,26 @@ export function getMyPermission(): Promise<MyPermission> {
   return _myPermInFlight
 }
 
-// ── Server control (deliberate shutdown + new-user lockdown) ─────────────────
-// Admin switches read by every user (the offline message) and written only by an admin
-// holding the app password. `lockdownNewUsers` / `draftMessage` are present ONLY for admins —
-// the backend omits them for everyone else, so treat them as optional here.
-export interface ServerControlStatus {
-  offline:           boolean
-  /** The message in force. Empty while the app is not offline — the backend does not hand out
-   *  a draft that has not been switched on. */
-  message:           string
-  /** Optional picture/GIF shown under the message — an https URL the browser loads directly, or ''
-   *  for none. Empty while the app is not offline, on the same rule as `message`. */
-  imageUrl?:         string
-  lockdownNewUsers?: boolean
-  draftMessage?:     string
-  draftImageUrl?:    string
-}
 
-/** Current operational state. Authenticated, not public: adding a fourth unauthenticated route
- *  echoing admin-authored text to the internet is not worth the convenience.
- *
- *  Both of these mirror the flag into quiet mode, so learning the server is off is the same
- *  event as muting this client's pollers (lib/awakeWindow). */
-export function serverControlStatus(): Promise<ServerControlStatus> {
-  return api.get<ServerControlStatus>('/api/server-control/status').then(res => {
-    setServerQuiet(!!res.data.offline)
-    // This route is exempt from the shutdown gate, so it is also the one answer that can
-    // authoritatively CLEAR the flag the interceptor sets — i.e. an admin turned it back on.
-    if (!res.data.offline) clearServerOffline()
-    return res.data
-  })
-}
 
-/** Admin + app password (the interceptor obtains the X-Admin-Unlock grant when missing).
- *  Only the keys present are changed, so a caller can flip one switch without echoing the
- *  others back. */
-export function serverControlSet(patch: {
-  offline?:          boolean
-  message?:          string
-  /** https URL, or '' to remove the image. The server rejects any other scheme with a 400. */
-  imageUrl?:         string
-  lockdownNewUsers?: boolean
-}): Promise<ServerControlStatus> {
-  return api.post<ServerControlStatus>('/api/server-control', patch).then(res => {
-    // The admin's own tab goes quiet immediately on save — no waiting for a poll to notice.
-    setServerQuiet(!!res.data.offline)
-    if (!res.data.offline) clearServerOffline()
-    return res.data
-  })
-}
 
-// ── Roster / user management types ────────────────────────────────────────────
-export interface UserWarning {
-  count:           number
-  severity:        'info' | 'warning' | 'high'
-  active:          boolean
-  recent:          boolean
-  last_lockout_at: string | null
-}
-export interface ManagedUser {
-  username:            string
-  role:                UserRole
-  is_blocked:          boolean
-  is_superadmin:       boolean
-  created_at:          string | null
-  last_login:          string | null
-  lockout_count:       number
-  last_lockout_at:     string | null
-  warning:             UserWarning | null
-  last_role_change_at: string | null
-  last_role_change_by: string | null
-  email:                string
-  /** Whether a credential exists at all. False = an account nobody can sign in to yet. */
-  has_password:         boolean
-  must_change_password: boolean
-  password_set_at:      string | null
-}
 
-export interface AccessRequestItem {
-  id:           number
-  username:     string
-  email:        string
-  status:       'pending' | 'approved' | 'rejected'
-  note:         string
-  created_at:   string | null
-  decided_at:   string | null
-  decided_by:   string | null
-  decided_role: string | null
-}
-export interface UserListResponse {
-  users:   ManagedUser[]
-  total:   number
-  limit:   number
-  offset:  number
-  admins:  string[]
-  editors: string[]
-}
-export interface SecurityEventItem {
-  id:         number
-  ts:         string | null
-  actor:      string | null
-  target:     string | null
-  event_type: string
-  detail:     string | null
-}
 
-/** List the full user roster with per-user state. Admins only. Supports search/filter/paging. */
-export async function listManagedUsers(params: {
-  q?: string; role?: string; status?: string; limit?: number; offset?: number
-} = {}): Promise<UserListResponse> {
-  const res = await api.get<UserListResponse>('/api/permissions/users', { params })
-  return res.data
-}
 
-/** Add or update a managed user (Editor/Admin). Admins only · gated by the ADMIN
- *  unlock (the interceptor prompts for ADMIN_PASSWORD if the session isn't unlocked).
- *
- *  When the account did not exist, the response carries the generated `password` — the ONLY
- *  time it is ever transmitted. Show it to the admin once; it cannot be read back later. */
-export async function addManagedUser(
-  username: string, role: 'editor' | 'admin', email?: string,
-): Promise<{ password?: string }> {
-  const res = await api.post<{ ok: boolean; username: string; role: string; password?: string }>(
-    '/api/permissions/users', { username, role, ...(email ? { email } : {}) },
-  )
-  return { password: res.data?.password }
-}
 
-/** Remove a managed user (demote to Reader — the roster row and its history are kept).
- *  Admins only · gated by the ADMIN unlock. For a full removal use `deleteManagedUser`. */
-export async function removeManagedUser(username: string): Promise<void> {
-  await api.post('/api/permissions/users/remove', { username })
-}
 
-/** DELETE the account for good: the roster row and its credential are removed, so the person
- *  has no account any more and would have to request access again. Distinct from `blockUser`
- *  (access denied, row and role preserved for a later unblock) and from `removeManagedUser`
- *  (demoted to Reader). The audit trail about them is append-only and survives. */
-export async function deleteManagedUser(username: string): Promise<void> {
-  await api.post('/api/permissions/users/delete', { username })
-}
 
-/** Generate a new password for an account and return it ONCE. Admins only · ADMIN unlock.
- *  The value exists only in this response — the server stores a hash and audits the reset. */
-export async function resetUserPassword(username: string): Promise<string> {
-  const res = await api.post<{ ok: boolean; username: string; password: string }>(
-    '/api/permissions/users/reset-password', { username },
-  )
-  return res.data.password
-}
 
-// ── Access requests (self-service sign-up queue) ──────────────────────────────
-/** The pending queue an admin decides on. Reading is admin-only; deciding also needs the
- *  ADMIN unlock, which the interceptor prompts for. */
-export async function listAccessRequests(params: {
-  status?: 'pending' | 'approved' | 'rejected' | 'all'; limit?: number; offset?: number
-} = {}): Promise<{ requests: AccessRequestItem[]; total: number; pending_count: number }> {
-  const res = await api.get<{ requests: AccessRequestItem[]; total: number; pending_count: number }>(
-    '/api/admin/access-requests', { params },
-  )
-  return res.data
-}
 
-/** Approve (creating the account with the password the requester already chose) or reject. */
-export async function decideAccessRequest(
-  id: number, action: 'approve' | 'reject', role: UserRole = 'reader',
-): Promise<void> {
-  await api.post('/api/admin/access-requests/decide', { id, action, role })
-}
 
-/** Block (ban) a user — denies them the whole application. Admins only · ADMIN unlock. */
-export async function blockUser(username: string): Promise<void> {
-  await api.post('/api/permissions/users/block', { username })
-}
 
-/** Unblock a user — restores access with their original role. Admins only · ADMIN unlock. */
-export async function unblockUser(username: string): Promise<void> {
-  await api.post('/api/permissions/users/unblock', { username })
-}
 
-/** Acknowledge a user's lockout warning (hides the badge; history is preserved). */
-export async function ackUserWarning(username: string): Promise<void> {
-  await api.post('/api/permissions/users/ack-warning', { username })
-}
 
 // ── Admin-editable working calendar (Manage Calendar) ─────────────────────────
 
-export interface CalendarDay {
-  date:         string   // ISO YYYY-MM-DD
-  day:          number
-  dow:          string
-  weekday:      number   // 0=Mon … 6=Sun
-  fw:           string
-  fiscal_month: number   // 4-4-5 fiscal month (1-12) this day's week rolls up to
-  is_weekend:   boolean
-  is_working:   boolean
-  is_holiday:   boolean
-}
 
-export interface CalendarOverrideRow {
-  date:       string
-  kind:       'holiday' | 'working'
-  label:      string
-  scope:      string
-  created_by: string
-  created_at: string | null
-  updated_at: string | null
-}
 
-/** 4-4-5 fiscal-month summary: fiscal-week range + effective working days for one fiscal
- *  period (respects holidays + day/fiscal-week overrides). */
-export interface FiscalMonthSummary {
-  month:        number   // 1-12 (fiscal month, maps 1:1 to the month card index)
-  fw_start:     string   // e.g. "FW01"
-  fw_end:       string   // e.g. "FW04"
-  weeks:        number
-  working_days: number
-}
 
-export interface CalendarResponse {
-  status:         string
-  year:           number
-  months:         Record<string, CalendarDay[]>   // '1'..'12' → days
-  overrides:      CalendarOverrideRow[]
-  fw_offset:      number   // per-year fiscal-week label offset (0 = default FW01 start)
-  weeks_in_year:  number   // raw weeks the year spans (52 or 53)
-  // Working days per RAW fiscal week (index 0 = week 1), independent of the label offset. The
-  // client regroups these into 4-4-5 fiscal months under any pending offset to recompute the
-  // month summaries live (see ManageCalendarModal). Optional for backward compatibility.
-  fiscal_week_working_days?: number[]
-  fiscal_months:  FiscalMonthSummary[]   // SAVED 4-4-5 summary baseline (server-computed)
-}
 
 /** Read the admin override delta (holiday/working dates). Any authenticated user —
  *  the frontend merges it into its base calendar so client-side business-day helpers
@@ -2319,28 +1326,8 @@ export async function calendarDateInfo(from: string, to: string): Promise<{
   return { date_info: res.data.date_info ?? [], fw_offsets: res.data.fw_offsets ?? {} }
 }
 
-/** Read the computed working calendar + override rows for a year. Admins only.
- *  month=0 (default) returns all 12 months; 1-12 narrows the grid to one month. */
-export async function getCalendar(year: number, month = 0): Promise<CalendarResponse> {
-  const res = await api.get<CalendarResponse>('/api/calendar', { params: { year, month } })
-  return res.data
-}
 
-/** Create/update/clear a single-day calendar override. Admins only · gated by the
- *  ADMIN unlock (the interceptor prompts for ADMIN_PASSWORD if the session isn't unlocked).
- *  kind 'holiday' = force day off, 'working' = exceptional working day, 'clear' = revert. */
-export async function setCalendarOverride(
-  date: string, kind: 'holiday' | 'working' | 'clear', label = '',
-): Promise<void> {
-  await api.post('/api/calendar/override', { date, kind, label })
-}
 
-/** Set/clear a year's fiscal-week label offset (default FW01 start). Admins only · ADMIN
- *  unlock. `offset` shifts every week's label in the year uniformly and cascades
- *  (offset -1 → the first week becomes FW52 of the previous fiscal year); 0 reverts. */
-export async function setFiscalWeekOffset(year: number, offset: number): Promise<void> {
-  await api.post('/api/calendar/fw-offset', { year, offset })
-}
 
 // ── Headcount / Workstation management (Editor+ · second factor) ────────────────────
 // Centralizes WS + people + capacity limits (Step 1: tab + CRUD + import + persistence
@@ -2415,237 +1402,27 @@ export async function getHeadcount(): Promise<HeadcountResponse> {
   return res.data
 }
 
-/** Create (no `id`) or edit (with `id`) one workstation. Editor+ · second factor. */
-export async function upsertWorkstation(ws: {
-  id?: number; wsn: string; area?: string; desc?: string
-  hour_limit?: number | null; people_limit?: number | null; qtde?: number | null; turnos?: number | null
-  required_level?: number | null
-  /** Questionnaire answers behind `required_level`, when it came from one. Stamped with the
-   *  question-set version server-side, same contract as `setPairExpertise`. */
-  required_answers?: number[] | null
-}): Promise<HeadcountWorkstation> {
-  const { required_answers, ...rest } = ws
-  const res = await api.post<{ status: string; workstation: HeadcountWorkstation }>(
-    '/api/headcount/workstation',
-    {
-      ...rest,
-      // Only when a target is actually being written — the server ignores provenance otherwise,
-      // and sending it on an unrelated edit would claim an assessment nobody made.
-      ...(rest.required_level != null
-        ? (required_answers && required_answers.length === 3
-            ? { required_source: quizSourceTag(), required_answers }
-            : { required_source: 'manual' })
-        : {}),
-    })
-  return res.data.workstation
-}
 
-export async function deleteWorkstation(id: number): Promise<void> {
-  await api.delete(`/api/headcount/workstation/${id}`)
-}
 
-export async function addPerson(name: string, area = ''): Promise<HeadcountPerson> {
-  const res = await api.post<{ status: string; person: HeadcountPerson }>('/api/headcount/person', { name, area })
-  return res.data.person
-}
 
-/** Edit one person (name and/or area). Editor+ · second factor. Renaming is id-based, so the
- *  workstation links follow automatically. */
-export async function updatePerson(id: number, patch: { name?: string; area?: string }): Promise<HeadcountPerson> {
-  const res = await api.post<{ status: string; person: HeadcountPerson }>(`/api/headcount/person/${id}`, patch)
-  return res.data.person
-}
 
-export async function removePerson(id: number): Promise<void> {
-  await api.delete(`/api/headcount/person/${id}`)
-}
 
-export async function linkPersonToWorkstation(
-  workstationId: number, personId: number, expertiseLevel?: number,
-): Promise<void> {
-  await api.post('/api/headcount/link', {
-    workstation_id: workstationId, person_id: personId,
-    // Omitted (not null) when unspecified — the server leaves a stored level alone on an
-    // absent key, and a plain re-link must not wipe an assessment.
-    ...(expertiseLevel != null ? { expertise_level: expertiseLevel } : {}),
-  })
-}
 
-/** Set one pair's expertise level (`e[p,w]`). Same endpoint as the link: the level lives ON
- *  the link, and the call is idempotent, so this both creates a missing link and updates the
- *  level on an existing one. Editor+ · second factor.
- *
- *  `answers` marks the write as coming from the questionnaire; the server keeps them only if
- *  they are three values in 1–3, and otherwise records a plain manual assignment. The source
- *  carries the QUESTION SET VERSION (`quiz@N`) so a later change to the questions retires the
- *  stored answers without touching the level they produced — see EXPERTISE_QUIZ_VERSION. */
-export async function setPairExpertise(
-  workstationId: number, personId: number, level: number, answers?: number[] | null,
-): Promise<void> {
-  await api.post('/api/headcount/link', {
-    workstation_id: workstationId, person_id: personId, expertise_level: level,
-    ...(answers && answers.length === 3
-      ? { expertise_source: quizSourceTag(), expertise_answers: answers }
-      : { expertise_source: 'manual' }),
-  })
-}
 
-export async function unlinkPersonFromWorkstation(workstationId: number, personId: number): Promise<void> {
-  await api.post('/api/headcount/unlink', { workstation_id: workstationId, person_id: personId })
-}
 
-export async function addPersonLeave(
-  personId: number, startDate: string, endDate: string, note = '',
-): Promise<HeadcountLeave> {
-  const res = await api.post<{ status: string; leave: HeadcountLeave }>('/api/headcount/leave', {
-    person_id: personId, start_date: startDate, end_date: endDate, note,
-  })
-  return res.data.leave
-}
 
-export async function deletePersonLeave(id: number): Promise<void> {
-  await api.delete(`/api/headcount/leave/${id}`)
-}
 
-/** Import the 'HeadCount' spreadsheet into workstation/person/workstation_person.
- *  Editor+ · import password (second factor) — same background-job flow as the other
- *  base imports; poll getDbImportStatus(job_id). */
-export async function importHeadcountToDb(file: File, password: string, mode: DbImportMode = 'replace'): Promise<DbImportJob> {
-  const formData = new FormData()
-  formData.append('file', file)
-  formData.append('password', password)
-  formData.append('mode', mode)
-  const res = await api.post<DbImportJob>('/api/db/import/headcount', formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
-    timeout: 120_000,
-  })
-  return res.data
-}
 
-/** Read the append-only security/audit trail. Admins only.
- *  `event_type`, `actor` and `target` are COMMA-SEPARATED sets of exact values (the column
- *  checklists — see getSecurityEventFacets). DETAIL has two: `detail_vals` is its checklist,
- *  NEWLINE-separated because detail text routinely contains commas, and `detail` is the
- *  free-text contains search. */
-export async function getSecurityEvents(params: {
-  target?: string; event_type?: string; actor?: string
-  detail?: string; detail_vals?: string
-  limit?: number; offset?: number
-} = {}): Promise<{ events: SecurityEventItem[]; total: number; limit: number; offset: number }> {
-  const res = await api.get<{ events: SecurityEventItem[]; total: number; limit: number; offset: number }>(
-    '/api/security/events', { params },
-  )
-  return res.data
-}
 
-/** Facet token the backend uses for NULL/empty values in a column checklist. */
-export const AUDIT_BLANK = '(vazias)'
 
-export interface SecurityEventFacets {
-  column: string
-  values: { value: string; count: number }[]
-  total: number
-  truncated: boolean
-}
 
-/** Distinct values (+ counts) available for ONE audit column, so its filter popover can list
- *  what is actually filterable. Scoped by the OTHER columns' active filters (Excel semantics). */
-export async function getSecurityEventFacets(params: {
-  column: 'event_type' | 'actor' | 'target' | 'detail'
-  target?: string; event_type?: string; actor?: string
-  detail?: string; detail_vals?: string
-}): Promise<SecurityEventFacets> {
-  const res = await api.get<SecurityEventFacets>('/api/security/events/facets', { params })
-  return res.data
-}
 
-export interface SecurityStats {
-  total_users:    number
-  by_role:        { reader: number; editor: number; admin: number }
-  blocked:        number
-  warned_total:   number
-  warned_active:  number
-  total_lockouts: number
-  active_7d:      number
-  active_30d:     number
-  events_30d:     Record<string, number>
-  recent_events:  SecurityEventItem[]
-}
-
-/** Aggregate metrics for the security dashboard. Admins only. */
-export async function getSecurityStats(): Promise<SecurityStats> {
-  const res = await api.get<SecurityStats>('/api/security/stats')
-  return res.data
-}
 
 // ── Admin notification feed (SecurityEvent trail → header badge) ──────────────
 
-/** A single admin alert = a SecurityEvent row plus its acknowledgement state. */
-export interface AdminAlert extends SecurityEventItem {
-  acknowledged_at: string | null
-  acknowledged_by: string | null
-}
 
-export interface AdminAlertsResponse {
-  alerts:       AdminAlert[]
-  active_count: number   // total ACTIVE alerts (badge number), independent of paging
-  total:        number
-  limit:        number
-  offset:       number
-}
 
-/** Admin notification feed. Admins only. `status='active'` returns unacknowledged alerts +
- *  the badge `active_count`; `status='history'` returns acknowledged ones for auditing. */
-export async function getAdminAlerts(
-  status: 'active' | 'history' = 'active', limit = 100,
-): Promise<AdminAlertsResponse> {
-  const res = await api.get<AdminAlertsResponse>('/api/admin/alerts', { params: { status, limit }, _backgroundPoll: true })
-  return res.data
-}
 
-/** Acknowledge alerts (mark reviewed → move to history). Admins only. Pass specific ids or
- *  `{ all: true }` to clear every active alert. Returns the new active count. */
-export async function acknowledgeAdminAlerts(
-  arg: { ids: number[] } | { all: true },
-): Promise<{ acknowledged: number; active_count: number }> {
-  const res = await api.post<{ ok: boolean; acknowledged: number; active_count: number }>(
-    '/api/admin/alerts/ack', arg,
-  )
-  return { acknowledged: res.data.acknowledged, active_count: res.data.active_count }
-}
 
-// ── Online users (admin indicator) ────────────────────────────────────────────
-export interface OnlineUser {
-  username:      string
-  name:          string
-  role:          string
-  last_activity: string | null
-  status:        'online' | 'idle'
-}
-export interface OnlineUsersResponse {
-  users:        OnlineUser[]
-  online_count: number   // actively-online users (the badge number)
-}
-/** Users active in the last few minutes (by last_activity). Admins only. */
-export async function getOnlineUsers(): Promise<OnlineUsersResponse> {
-  const res = await api.get<OnlineUsersResponse>('/api/admin/online-users', { _backgroundPoll: true })
-  return (res.data && typeof res.data === 'object' && Array.isArray(res.data.users))
-    ? res.data : { users: [], online_count: 0 }
-}
 
 // ── Admin second factor ("unlock") ────────────────────────────────────────────
-
-/**
- * Exchange the ADMIN_PASSWORD for a ~15-min unlock grant and store it. Sensitive
- * requests then carry it automatically (X-Admin-Unlock). Throws on a wrong/absent
- * password (403) or when the server has no ADMIN_PASSWORD configured (503).
- * `reason` (optional) labels WHY the password was entered in the admin audit trail /
- * alert feed (e.g. "Exportação Denodo — Horas Transacionadas").
- */
-export async function unlockAdmin(password: string, reason?: string): Promise<void> {
-  const res = await api.post<{ unlock_token: string; expires_in: number }>(
-    '/api/admin/unlock',
-    { password, reason: reason || undefined },
-  )
-  setUnlock(res.data.unlock_token, res.data.expires_in)
-}

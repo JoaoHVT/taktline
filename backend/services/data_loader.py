@@ -1,16 +1,14 @@
 """
 services/data_loader.py
 -----------------------
-Ingestão e preparação de dados a partir do Excel de capacidade (HorasB3.xlsx).
+Preparação dos dados de capacidade lidos do banco.
 
-Responsabilidade única: ler o arquivo, normalizar e retornar um dict estruturado
-pronto para ser consumido pelo solver ou pelo frontend.
+Responsabilidade única: normalizar o frame de demanda e devolver um dict estruturado pronto para
+ser consumido pelo solver ou pelo frontend. Não abre arquivo nem toca no banco — quem chama já
+traz o DataFrame.
 
-Não depende de PyQt5 nem de nenhum estado de UI.
-
-Folha principal  → "Discretizado"  (demanda por WSN, pessoas, escopo)
-Folha de pessoas → "HeadCount"     (mapa WSN → lista de pessoas + disponibilidade)
-Folha de capacidade → "Testes"     (horas disponíveis, OT e TOP por pessoa)
+Frame principal → demanda por WSN, pessoas e escopo (a "Discretizado" do modelo de dados)
+Headcount       → mapa WSN → lista de pessoas + disponibilidade, vindo das tabelas do banco
 """
 
 from __future__ import annotations
@@ -37,19 +35,6 @@ logger = logging.getLogger(__name__)
 # WSN, and the Item Rout importer now drops the column outright — requiring it here would reject
 # every post-cutover import. WSN stays required: it is the key the Headcount tab is mapped through.
 _DISC_REQUIRED = {"WSN", "HH TOTAL", "ESCOPO"}
-_HC_REQUIRED   = {"WSN", "HEADCOUNT", "QTDE", "DISP"}
-_TEST_COLS = {
-    "matricula":  "Matrícula ",
-    "nome":       "Nome                                    ",
-    "secao":      "Seção de Trabalho ",
-    "hh_disp":    "HH DISP.",
-    "hh_disp_ot": "HH DISP..1",
-    "ot_h":       "OT",
-    "ot_dia":     "OT/DIA",
-    "top":        "TOP",
-    "disp":       "DISP",
-    "disp_ot":    "DISP.1",
-}
 
 
 # ── Utilitários internos ──────────────────────────────────────────────────────
@@ -89,11 +74,6 @@ def _str_val(value: Any) -> str:
     return str(value).strip()
 
 
-def _split_people(raw: Any) -> list[str]:
-    """Converte 'NOME A, NOME B, ...' em lista de nomes normalizados."""
-    if not raw or (isinstance(raw, float) and np.isnan(raw)):
-        return []
-    return [p.strip() for p in str(raw).split(",") if p.strip()]
 
 
 def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
@@ -113,8 +93,7 @@ def _build_assembly_desc_map(
     col_desc: str | None,
 ) -> dict[str, str]:
     """
-    Build {normalized_code: description} from the Discretizado sheet.
-    Mirrors CapB3356103.py _build_assembly_desc_map():
+    Build {normalized_code: description} from the Discretizado sheet.    Groups by ASSEMBLY code:
 
     For each unique ASSEMBLY code:
       1. Prefer rows where ASSEMBLY == COMPONENT (self-referential) — these
@@ -236,213 +215,39 @@ def _parse_discretizado(
 # "no capacity constraints", never "go look at the routing".
 
 
-def _parse_headcount(df: pd.DataFrame) -> dict[str, dict]:
-    """
-    Lê a aba 'HeadCount' e retorna:
-      { wsn → { "people": [...], "qtde": int, "disp": float, "lh": float,
-                "turnos": int, "lm": int, "desc": str } }
-
-    Suporta dois formatos:
-
-    FORMATO MATRIZ (atual):
-      Quando lido com header=0 (padrão pandas), a estrutura é:
-        df.columns  — Unnamed: 0..11  + inteiros 1, 2, ..., 91 (colunas de pessoa)
-        df.iloc[0]  — nomes dos funcionários nas colunas inteiras
-        df.iloc[2]  — labels de coluna: WSN, DESC, HEADCOUNT, QTDE, LH, LM, TURNO
-        df.iloc[3:] — dados com True/False nas colunas de pessoa
-
-    FORMATO LEGADO:
-      df.columns contém "WSN", "HEADCOUNT", "QTDE", "DISP" como cabeçalhos reais.
-    """
-    if df.empty:
-        return {}
-
-    # Detecta formato legado: "WSN" é um cabeçalho de coluna real
-    if "WSN" in df.columns:
-        return _parse_headcount_legacy(df)
-
-    # Detecta formato matriz: row 2 contém "WSN" como valor
-    if len(df) < 3:
-        return {}
-    row2_labels = {str(v).strip().upper() for v in df.iloc[2] if pd.notna(v) and str(v).strip()}
-    if "WSN" not in row2_labels:
-        logger.warning("HeadCount: formato de aba não reconhecido — ignorando sheet.")
-        return {}
-
-    return _parse_headcount_matrix(df)
 
 
-def _parse_headcount_matrix(df: pd.DataFrame) -> dict[str, dict]:
-    """
-    Formato matriz: colunas inteiras (1, 2, ...) representam funcionários.
-      - df.iloc[0]  → nomes dos funcionários (coluna inteira → nome)
-      - df.iloc[2]  → labels de coluna (WSN, DESC, QTDE, LH, LM, TURNO, ...)
-      - df.iloc[3:] → dados (True/False em colunas de pessoa)
-    """
-    # Mapa coluna-inteira → nome do funcionário (row 0)
-    person_col_to_name: dict[int, str] = {}
-    for col_name in df.columns:
-        if isinstance(col_name, int):
-            person_val = df.iloc[0].get(col_name)
-            if pd.notna(person_val) and str(person_val).strip():
-                person_col_to_name[col_name] = str(person_val).strip()
-
-    # Mapa label-de-coluna → nome-de-coluna-no-df (row 2)
-    col_by_label: dict[str, Any] = {}
-    for col_name, val in df.iloc[2].items():
-        label = str(val).strip().upper() if pd.notna(val) else ""
-        if label and label != "NAN":
-            col_by_label[label] = col_name
-
-    wsn_col   = col_by_label.get("WSN")
-    if wsn_col is None:
-        return {}
-    desc_col  = col_by_label.get("DESC")
-    qtde_col  = col_by_label.get("QTDE")
-    lh_col    = col_by_label.get("LH")
-    lm_col    = col_by_label.get("LM")
-    # Aceita tanto "TURNO" (atual) quanto "TURNOS" (futuro)
-    turno_col = col_by_label.get("TURNOS") or col_by_label.get("TURNO")
-
-    def _cell(row: "pd.Series", col: Any) -> Any:
-        if col is None:
-            return None
-        v = row.get(col)
-        return None if (v is None or (not isinstance(v, (bool, str)) and pd.isna(v))) else v
-
-    result: dict[str, dict] = {}
-    for _, row in df.iloc[3:].iterrows():
-        wsn_val = row.get(wsn_col)
-        if pd.isna(wsn_val) or not str(wsn_val).strip():
-            continue
-        wsn = str(wsn_val).strip()
-
-        # Funcionários alocados: colunas inteiras com valor truthy (True, 1, 'X')
-        people: list[str] = []
-        for col_name, person_name in person_col_to_name.items():
-            try:
-                cell_val = row.get(col_name)
-                if pd.notna(cell_val) and cell_val:
-                    people.append(person_name)
-            except (TypeError, ValueError):
-                pass
-
-        result[wsn] = {
-            "people": sorted(people),
-            "qtde":   int(_safe_float(_cell(row, qtde_col), 0)),
-            "disp":   1.0,
-            "lh":     _safe_float(_cell(row, lh_col), 0.0),
-            "turnos": int(_safe_float(_cell(row, turno_col), 0)),
-            "lm":     int(_safe_float(_cell(row, lm_col), 0)),
-            "desc":   str(_cell(row, desc_col) or "").strip(),
-        }
-
-    return result
 
 
-def _parse_headcount_legacy(df: pd.DataFrame) -> dict[str, dict]:
-    """
-    Formato legado: colunas WSN, HEADCOUNT (nomes separados por vírgula), QTDE, DISP.
-    """
-    missing = {"WSN"} - set(df.columns)
-    if missing:
-        logger.warning("Colunas ausentes em 'HeadCount' (legado): %s — ignorando sheet.", missing)
-        return {}
-
-    col_turnos = _find_col(df, ["TURNOS", "TURNO"])
-    col_lm     = _find_col(df, ["LM"])
-
-    result: dict[str, dict] = {}
-    for _, row in df.dropna(subset=["WSN"]).iterrows():
-        wsn = str(row["WSN"]).strip()
-        if not wsn:
-            continue
-        turnos_raw = row.get(col_turnos) if col_turnos else None
-        lm_raw     = row.get(col_lm)     if col_lm     else None
-        turnos = int(_safe_float(turnos_raw, 0)) if turnos_raw is not None else 0
-        lm     = int(_safe_float(lm_raw,     0)) if lm_raw     is not None else 0
-        result[wsn] = {
-            "people": _split_people(row.get("HEADCOUNT")),
-            "qtde":   int(_safe_float(row.get("QTDE"), 0)),
-            "disp":   _safe_float(row.get("DISP"), 1.0),
-            "lh":     _safe_float(row.get("LH"), 0.0),
-            "turnos": turnos,
-            "lm":     lm,
-            "desc":   str(row.get("DESC") or "").strip(),
-        }
-    return result
 
 
-def _parse_employee_capacity(df: pd.DataFrame) -> dict[str, dict]:
-    """
-    Lê a aba 'Testes' e retorna:
-      { nome_normalizado → { "nome": str, "normal_h": float, "ot_h": float,
-                              "top_pct": float, "disp": float, "secao": str } }
-    """
-    col = lambda key: _TEST_COLS.get(key, key)
-
-    nome_col = _find_col(df, [_TEST_COLS["nome"], "Nome", "FUNCIONÁRIO"])
-    if nome_col is None:
-        logger.warning("Coluna 'Nome' não encontrada em 'Testes' — ignorando sheet.")
-        return {}
-
-    result: dict[str, dict] = {}
-    for _, row in df.iterrows():
-        raw_nome = row.get(nome_col)
-        if not raw_nome or (isinstance(raw_nome, float) and np.isnan(raw_nome)):
-            continue
-        nome = str(raw_nome).strip()
-        key  = _normalize(nome)
-
-        hh_col   = _find_col(df, [_TEST_COLS["hh_disp"],    "HH DISP."])
-        ot_col   = _find_col(df, [_TEST_COLS["ot_h"],       "OT"])
-        top_col  = _find_col(df, [_TEST_COLS["top"],        "TOP"])
-        disp_col = _find_col(df, [_TEST_COLS["disp"],       "DISP"])
-        sec_col  = _find_col(df, [_TEST_COLS["secao"],      "Seção de Trabalho "])
-
-        result[key] = {
-            "nome":     nome,
-            "normal_h": _safe_float(row.get(hh_col) if hh_col else None),
-            "ot_h":     _safe_float(row.get(ot_col)  if ot_col  else None),
-            "top_pct":  _safe_float(row.get(top_col) if top_col else None, 1.0),
-            "disp":     _safe_float(row.get(disp_col) if disp_col else None, 1.0),
-            "secao":    str(row.get(sec_col) or "").strip() if sec_col else "",
-        }
-
-    return result
 
 
 # ── Função pública principal ──────────────────────────────────────────────────
 
 def load_and_prepare_data(
-    filepath: str | Path,
+    df: "pd.DataFrame",
     *,
     ano:    int | None = None,
     mes:    int | None = None,
     escopo: str | None = None,
-    df_override: "pd.DataFrame | None" = None,
     headcount_override: dict[str, dict] | None = None,
 ) -> dict:
     """
-    Carrega o Excel de capacidade e retorna um dict estruturado.
+    Estrutura o frame de demanda (aba 'Discretizado', vinda do banco) para o otimizador.
 
     Parâmetros opcionais de filtro:
-      ano    : filtra pelo ano (coluna ANO em Discretizado)
-      mes    : filtra pelo mês (coluna MES em Discretizado)
+      ano    : filtra pelo ano (coluna ANO)
+      mes    : filtra pelo mês (coluna MES)
       escopo : filtra pelo escopo (ÚNICO, LEVE, MÉDIO, PESADO)
-      df_override: usa este DataFrame em vez de ler a aba 'Discretizado' do Excel
-      headcount_override: quando fornecido (mesmo vazio), SUBSTITUI o headcount_by_wsn
-        derivado do Item Rout pelos dados centralizados da aba Headcount (Workstation/
-        Person/WorkstationPerson no banco) — Item Rout deixa de ser fonte de capacidade.
-        Quando None (não informado), NÃO há mais fallback derivado do Item Rout: o headcount fica
-        vazio ({}), ou seja "sem restrição de capacidade". A derivação a partir das colunas
-        LH/LM/TURNOS/HEADCOUNT do Item Rout foi removida no cutover para a aba Headcount.
+      headcount_override: capacidade por WSN (tabelas Workstation/Person/WorkstationPerson).
+        Quando None, o headcount fica vazio ({}), ou seja "sem restrição de capacidade" — não há
+        derivação a partir das colunas LH/LM/TURNOS/HEADCOUNT do roteiro.
 
     Retorno:
     {
       "status":           "ok" | "error",
       "message":          str,
-      "filepath":         str,
       "sheets_loaded":    [str, ...],
       "filters_applied":  { ano, mes, escopo },
       "demand_by_wsn":    { wsn: float },
@@ -454,119 +259,33 @@ def load_and_prepare_data(
       "preview":          { "rows": int, "sample": [...] },
     }
     """
-    filepath = Path(filepath)
-
-    if df_override is not None:
-        # Use the provided DataFrame as the Discretizado sheet (DB fallback)
-        sheets_loaded: list[str] = ["Discretizado (DB)"]
-        try:
-            demand_by_wsn, people_by_wsn, sample_rows = _parse_discretizado(
-                df_override, ano, mes, escopo
-            )
-        except Exception as exc:
-            return {"status": "error", "message": f"Erro ao processar df_override: {exc}"}
-        # No routing-derived fallback any more: absent capacity means "unconstrained", not "read it
-        # off Item Rout" (see the removal note on _build_headcount_from_discretizado).
-        headcount_by_wsn = headcount_override or {}
-        # The Headcount tab is AUTHORITATIVE for who works a WSN — assign, don't gap-fill. The old
-        # `if wsn not in people_by_wsn` guard made the routing's HEADCOUNT column win whenever it had
-        # any value, so the tab only ever filled blanks and a person removed there stayed allocated.
-        for wsn, hc in headcount_by_wsn.items():
-            people_by_wsn[wsn] = hc.get("people", [])
-        capacity_by_person: dict[str, dict] = {}
-        wsn_list       = sorted(demand_by_wsn.keys())
-        total_demand_h = sum(demand_by_wsn.values())
-        return {
-            "status":             "ok",
-            "message":            f"{len(wsn_list)} WSNs carregados (via DB), demanda total {total_demand_h:.1f} h.",
-            "filepath":           str(filepath),
-            "sheets_loaded":      sheets_loaded,
-            "filters_applied":    {"ano": ano, "mes": mes, "escopo": escopo},
-            "demand_by_wsn":      demand_by_wsn,
-            "people_by_wsn":      people_by_wsn,
-            "headcount_by_wsn":   headcount_by_wsn,
-            "capacity_by_person": capacity_by_person,
-            "wsn_list":           wsn_list,
-            "total_demand_h":     total_demand_h,
-            "preview": {
-                "rows":   len(df_override),
-                "sample": sample_rows,
-            },
-        }
-
-    if not filepath.exists():
-        return {"status": "error", "message": f"Arquivo não encontrado: {filepath}"}
-
     try:
-        xl = pd.ExcelFile(filepath)
+        demand_by_wsn, people_by_wsn, sample_rows = _parse_discretizado(df, ano, mes, escopo)
     except Exception as exc:
-        return {"status": "error", "message": f"Falha ao abrir Excel: {exc}"}
+        return {"status": "error", "message": f"Erro ao processar a demanda: {exc}"}
 
-    sheets_loaded = []
+    headcount_by_wsn = headcount_override or {}
 
-    # ── Discretizado (obrigatória) ────────────────────────────────
-    if "Discretizado" not in xl.sheet_names:
-        return {"status": "error", "message": "Aba 'Discretizado' não encontrada."}
-
-    try:
-        df_disc = xl.parse("Discretizado")
-        demand_by_wsn, people_by_wsn, sample_rows = _parse_discretizado(
-            df_disc, ano, mes, escopo
-        )
-        sheets_loaded.append("Discretizado")
-    except Exception as exc:
-        logger.exception("Erro ao processar 'Discretizado'")
-        return {"status": "error", "message": f"Erro em 'Discretizado': {exc}"}
-
-    # ── HeadCount (opcional) ──────────────────────────────────────
-    headcount_by_wsn: dict[str, dict] = {}
-    if "HeadCount" in xl.sheet_names:
-        try:
-            df_hc = xl.parse("HeadCount")
-            headcount_by_wsn = _parse_headcount(df_hc)
-            sheets_loaded.append("HeadCount")
-        except Exception as exc:
-            logger.warning("Erro ao processar 'HeadCount': %s", exc)
-
-    # ── Testes / capacidade por pessoa (opcional) ─────────────────
-    capacity_by_person: dict[str, dict] = {}
-    if "Testes" in xl.sheet_names:
-        try:
-            df_test = xl.parse("Testes")
-            capacity_by_person = _parse_employee_capacity(df_test)
-            sheets_loaded.append("Testes")
-        except Exception as exc:
-            logger.warning("Erro ao processar 'Testes': %s", exc)
-
-    # Headcount tab (DB) overrides the Excel 'HeadCount' sheet too, when the caller passes
-    # it — same "single source of truth" policy as the df_override/DB-split branch above.
-    if headcount_override is not None:
-        headcount_by_wsn = headcount_override
-
-    # ── Consolidação ──────────────────────────────────────────────
-    wsn_list       = sorted(demand_by_wsn.keys())
-    total_demand_h = sum(demand_by_wsn.values())
-
-    # people_by_wsn comes FROM the headcount source (DB tab when overridden, else the Excel
-    # 'HeadCount' sheet) — assigned, not gap-filled, so removing a person there actually removes
-    # them instead of the routing's stale HEADCOUNT column winning.
+    # O headcount é AUTORITATIVO sobre quem trabalha numa WSN — atribui, não preenche lacuna: uma
+    # pessoa removida lá tem de sair da alocação, e não perder para a coluna HEADCOUNT do roteiro.
     for wsn, hc in headcount_by_wsn.items():
         people_by_wsn[wsn] = hc.get("people", [])
 
+    wsn_list       = sorted(demand_by_wsn.keys())
+    total_demand_h = sum(demand_by_wsn.values())
     return {
-        "status":            "ok",
-        "message":           f"{len(wsn_list)} WSNs carregados, demanda total {total_demand_h:.1f} h.",
-        "filepath":          str(filepath),
-        "sheets_loaded":     sheets_loaded,
-        "filters_applied":   {"ano": ano, "mes": mes, "escopo": escopo},
-        "demand_by_wsn":     demand_by_wsn,
-        "people_by_wsn":     people_by_wsn,
-        "headcount_by_wsn":  headcount_by_wsn,
-        "capacity_by_person": capacity_by_person,
-        "wsn_list":          wsn_list,
-        "total_demand_h":    total_demand_h,
+        "status":             "ok",
+        "message":            f"{len(wsn_list)} WSNs carregados, demanda total {total_demand_h:.1f} h.",
+        "sheets_loaded":      ["Discretizado"],
+        "filters_applied":    {"ano": ano, "mes": mes, "escopo": escopo},
+        "demand_by_wsn":      demand_by_wsn,
+        "people_by_wsn":      people_by_wsn,
+        "headcount_by_wsn":   headcount_by_wsn,
+        "capacity_by_person": {},
+        "wsn_list":           wsn_list,
+        "total_demand_h":     total_demand_h,
         "preview": {
-            "rows":   len(df_disc),
+            "rows":   len(df),
             "sample": sample_rows,
         },
     }
@@ -575,7 +294,7 @@ def load_and_prepare_data(
 # ── Importação de itens do plano mensal ──────────────────────────────────────
 
 def get_items_for_import(
-    filepath: str | Path,
+    df: "pd.DataFrame",
     *,
     ano:   int | None = None,
     mes:   int | None = None,
@@ -583,10 +302,9 @@ def get_items_for_import(
     fw:    str | None = None,
     fws:   list[str] | None = None,
     mode:  str = "mensal",
-    df_override: "pd.DataFrame | None" = None,
 ) -> dict:
     """
-    Lê a aba 'Discretizado' e retorna:
+    Lê o frame de demanda e retorna:
       - lista de itens únicos para a tela de importação (equivalente ao open_alert_flow do PyQt5)
       - valores disponíveis para os filtros (anos, meses, FWs)
 
@@ -604,27 +322,7 @@ def get_items_for_import(
         "wsn":       str,
       }
     """
-    filepath = Path(filepath)
-    if not filepath.exists() and df_override is None:
-        return {"status": "error", "message": f"Arquivo não encontrado: {filepath}"}
-
-    if df_override is not None:
-        df = df_override
-    else:
-        try:
-            xl = pd.ExcelFile(filepath)
-        except Exception as exc:
-            return {"status": "error", "message": f"Falha ao abrir Excel: {exc}"}
-
-        if "Discretizado" not in xl.sheet_names:
-            return {"status": "error", "message": "Aba 'Discretizado' não encontrada."}
-
-        try:
-            df = xl.parse("Discretizado")
-        except Exception as exc:
-            return {"status": "error", "message": f"Erro ao ler aba 'Discretizado': {exc}"}
-
-    # ── descobrir colunas dinamicamente (mesmo padrão do CapB) ────────────────
+    # ── descobrir colunas dinamicamente  ────────────────
     def fc(*candidates):
         return _find_col(df, list(candidates))
 
@@ -669,7 +367,7 @@ def get_items_for_import(
         }
 
     # ── build description map from ASSEMBLY column (full dataset, before any filter)
-    # Mirrors CapB3356103.py _build_assembly_desc_map(): groups by ASSEMBLY code,
+    #    Groups by ASSEMBLY code: groups by ASSEMBLY code,
     # prefers self-referential rows (ASSEMBLY==COMPONENT) for the item's own description.
     desc_map = _build_assembly_desc_map(df, col_asm, col_comp, col_desc)
 
@@ -683,7 +381,7 @@ def get_items_for_import(
         df = df[df[col_ano].fillna(-1).astype(int) == int(ano)]
 
     # ── mapa mês → FWs (após filtro de ANO, antes de filtro de MES) ──────────
-    # Mirrors _list_available_fw_values() in CapB3356103.py: filter DataFrame by
+    # Filter the DataFrame by
     # selected month and collect unique FW values.  This lets the frontend look up
     # FWs for any month without additional API calls.
     mes_fw_map: dict[int, list[str]] = {}
@@ -774,7 +472,7 @@ def get_items_for_import(
     # Compute accurate qty: deduplicate per (item, fw) with max() to remove
     # per-operation row duplication, then sum() across FWs to accumulate all
     # independent weekly batches.  Monthly demand = sum of all weekly batches,
-    # mirroring _resolve_import_qty_total_for_group() in CapB3356103.py which
+    # resolving the import quantity per group, which
     # explicitly accumulates weekly_total across FWs.
     qty_by_item: dict[str, float] = {}
     if col_qty:
@@ -961,42 +659,21 @@ def get_items_for_import(
 # ── Loader com caminho padrão (útil para dev local) ───────────────────────────
 
 def get_items_catalog(
-    filepath: str | Path,
+    df: "pd.DataFrame",
     *,
     areas:    list[str] | None = None,
     familias: list[str] | None = None,
     clientes: list[str] | None = None,
-    df_override: "pd.DataFrame | None" = None,
 ) -> dict:
     """
-    Returns the full catalog of unique items from the 'Discretizado' sheet,
-    with no period/FW filter. Equivalent to AddAssemblyDialog in CapB3356103.py.
+    Returns the full catalog of unique items from the demand frame,
+    with no period/FW filter.
 
     Each item:
       { id, item, descricao, familia, area, cliente }
     Filter options returned:
       { areas, familias, clientes }
     """
-    filepath = Path(filepath)
-    if not filepath.exists() and df_override is None:
-        return {"status": "error", "message": f"Arquivo não encontrado: {filepath}"}
-
-    if df_override is not None:
-        df = df_override
-    else:
-        try:
-            xl = pd.ExcelFile(filepath)
-        except Exception as exc:
-            return {"status": "error", "message": f"Falha ao abrir Excel: {exc}"}
-
-        if "Discretizado" not in xl.sheet_names:
-            return {"status": "error", "message": "Aba 'Discretizado' não encontrada."}
-
-        try:
-            df = xl.parse("Discretizado")
-        except Exception as exc:
-            return {"status": "error", "message": f"Erro ao ler aba 'Discretizado': {exc}"}
-
     def fc(*candidates):
         return _find_col(df, list(candidates))
 
@@ -1104,88 +781,28 @@ def get_items_catalog(
     }
 
 
-def load_default_excel(
-    *,
-    ano:    int | None = None,
-    mes:    int | None = None,
-    escopo: str | None = None,
-) -> dict:
-    """
-    Carrega o Excel a partir do caminho padrão (mesmo diretório do módulo).
-    Conveniente para desenvolvimento local sem upload.
-    """
-    default_path = Path(__file__).resolve().parent.parent / "HorasB3.xlsx"
-    return load_and_prepare_data(default_path, ano=ano, mes=mes, escopo=escopo)
 
 
-def compute_capacity_stats(
-    filepath: str | Path,
-    *,
-    headcount_override: dict[str, dict] | None = None,
-) -> dict:
+def compute_capacity_stats(headcount_by_wsn: dict[str, dict] | None) -> dict:
     """
     Computa DISPONIVEL_H e ALOCADO_H (KPIs do rodapé).
 
     DISPONIVEL: capacidade real — por WSN: qtde × lh × disp.
-                Fallback per-pessoa: normal_h × disp quando lh = 0.
     ALOCADO   : capacidade máxima — por WSN: qtde × lh.
-                Fallback per-pessoa: normal_h quando lh = 0.
 
-    ``headcount_override`` (aba Headcount centralizada, por WSN) é a fonte única quando fornecido —
-    inclusive vazio, que significa "sem capacidade cadastrada" e retorna zeros. Antes esta função só
-    lia as abas HeadCount/Testes do HorasB3.xlsx e, como esse arquivo não existe em produção,
-    devolvia zeros sempre — os KPIs do rodapé nunca refletiram a aba Headcount.
-
-    O caminho Excel (filepath) permanece apenas como fallback offline/dev quando nada é fornecido; a
-    aba 'Testes' (capacidade por pessoa) continua sendo lida dali, pois não foi migrada.
+    ``headcount_by_wsn`` é a fonte única — inclusive vazio ou None, que significa "sem capacidade
+    cadastrada" e devolve zeros em vez de erro.
     """
-    filepath = Path(filepath)
-
-    headcount_by_wsn: dict[str, dict] = {}
-    capacity_by_person: dict[str, dict] = {}
-
-    # A aba 'Testes' (horas por pessoa) só existe no Excel e é usada apenas no fallback lh = 0.
-    if filepath.exists():
-        try:
-            xl = pd.ExcelFile(filepath)
-            if "Testes" in xl.sheet_names:
-                try:
-                    capacity_by_person = _parse_employee_capacity(xl.parse("Testes"))
-                except Exception as exc:
-                    logger.warning("Erro ao processar 'Testes': %s", exc)
-            if headcount_override is None and "HeadCount" in xl.sheet_names:
-                try:
-                    headcount_by_wsn = _parse_headcount(xl.parse("HeadCount"))
-                except Exception as exc:
-                    logger.warning("Erro ao processar 'HeadCount': %s", exc)
-        except Exception as exc:
-            logger.warning("Falha ao abrir Excel para capacity stats: %s", exc)
-    elif headcount_override is None:
-        # Sem override e sem Excel não há como calcular — zeros (como antes), não erro.
-        return {"status": "ok", "disponivel_h": 0.0, "alocado_h": 0.0}
-
-    if headcount_override is not None:
-        headcount_by_wsn = headcount_override
-
     disponivel_h = 0.0
     alocado_h    = 0.0
 
-    for _wsn, hc in headcount_by_wsn.items():
+    for _wsn, hc in (headcount_by_wsn or {}).items():
         qtde = hc.get("qtde", 0)
         disp = hc.get("disp", 1.0)
         lh   = hc.get("lh",   0.0)
-
         if lh > 0:
             alocado_h    += qtde * lh
             disponivel_h += qtde * lh * disp
-        else:
-            # Fallback: soma as horas individuais de cada pessoa no WSN
-            for person_name in hc.get("people", []):
-                cap  = capacity_by_person.get(_normalize(person_name), {})
-                ph   = cap.get("normal_h", 0.0)
-                pdisp = cap.get("disp",   1.0)
-                alocado_h    += ph
-                disponivel_h += ph * pdisp
 
     return {
         "status":       "ok",
@@ -1194,82 +811,25 @@ def compute_capacity_stats(
     }
 
 
-def get_wsn_people_map(
-    filepath: str | Path,
-    *,
-    headcount_override: dict[str, dict] | None = None,
-) -> dict:
+def get_wsn_people_map(headcount_by_wsn: dict[str, dict] | None) -> dict:
     """
     Lightweight: returns the full WSN → people mapping.
     No period filtering — people skills are static data.
 
-    ``headcount_override`` (the centralized Headcount tab, keyed by WSN) is the SINGLE SOURCE when
-    supplied — including when empty, which means "nobody is allocated", not "fall back to the
-    routing". This replaced reading the routing's HEADCOUNT column, which is no longer imported.
-
-    ``filepath`` remains only for the legacy offline path (a local HorasB3.xlsx) used when no override
-    is passed at all, i.e. a DB-less dev run. The former ``df_override`` parameter was dropped with
-    the cutover: it existed solely to scan the routing frame's HEADCOUNT column, which no longer
-    exists, and no caller passed it any more.
+    ``headcount_by_wsn`` is the single source, including when empty: that means "nobody is
+    allocated", never "fall back to the routing".
 
     Returns:
       { "status": "ok", "people_by_wsn": { wsn: [person, ...] } }
     """
-    filepath = Path(filepath)
-
-    # ── Headcount tab (authoritative) ─────────────────────────────────────────
-    if headcount_override is not None:
-        return {
-            "status": "ok",
-            "people_by_wsn": {
-                wsn: list(hc.get("people", []))
-                for wsn, hc in headcount_override.items()
-                if hc.get("people")
-            },
-        }
-
-    # ── Legacy Excel path (no DB) ─────────────────────────────────────────────
-    if not filepath.exists():
-        return {"status": "error", "message": f"Arquivo não encontrado: {filepath}"}
-
-    try:
-        xl = pd.ExcelFile(filepath)
-    except Exception as exc:
-        return {"status": "error", "message": f"Falha ao abrir Excel: {exc}"}
-
-    people_by_wsn: dict[str, list[str]] = {}
-
-    # Legacy workbooks still carry the inline HEADCOUNT column on 'Discretizado'; this branch only
-    # runs when there is no DB at all, so reading it here cannot resurrect it as a live source.
-    if "Discretizado" in xl.sheet_names:
-        try:
-            df = xl.parse("Discretizado")
-            col_wsn = _find_col(df, ["WSN"])
-            col_hc  = _find_col(df, ["HEADCOUNT"])
-            if col_wsn and col_hc:
-                df = df.dropna(subset=[col_wsn])
-                for wsn_val, grp in df.groupby(col_wsn):
-                    wsn_key = str(wsn_val).strip()
-                    people = set()
-                    for raw in grp[col_hc].dropna():
-                        people.update(_split_people(raw))
-                    if people:
-                        people_by_wsn[wsn_key] = sorted(people)
-        except Exception as exc:
-            logger.warning("Erro ao ler Discretizado para people_by_wsn: %s", exc)
-
-    # ── HeadCount sheet — enriches / fills gaps ───────────────────────────────
-    if "HeadCount" in xl.sheet_names:
-        try:
-            headcount_by_wsn = _parse_headcount(xl.parse("HeadCount"))
-            for wsn, hc in headcount_by_wsn.items():
-                if wsn not in people_by_wsn or not people_by_wsn[wsn]:
-                    if hc["people"]:
-                        people_by_wsn[wsn] = hc["people"]
-        except Exception as exc:
-            logger.warning("Erro ao ler HeadCount para people_by_wsn: %s", exc)
-
-    return {"status": "ok", "people_by_wsn": people_by_wsn}
+    return {
+        "status": "ok",
+        "people_by_wsn": {
+            wsn: list(hc.get("people", []))
+            for wsn, hc in (headcount_by_wsn or {}).items()
+            if hc.get("people")
+        },
+    }
 
 
 def _build_fw_year_map(df: "pd.DataFrame | None") -> dict[str, int]:
@@ -1302,57 +862,71 @@ def _build_fw_year_map(df: "pd.DataFrame | None") -> dict[str, int]:
     return out
 
 
-def get_period_days(
-    filepath: str | Path,
-    fws: list[str],
-    *,
-    df_override: "pd.DataFrame | None" = None,
-) -> dict:
+def get_period_days(df: "pd.DataFrame | None", fws: list[str]) -> dict:
     """
     Given a list of FW identifiers (e.g. ["17", "18"]), return the working days
     per fiscal week, computed from the SHARED 4-4-5 calendar engine
     (services.calendar_445) — the same engine the Schedule/Gantt app uses.
 
-    This replaces the previous behaviour of summing the pre-baked WEEK_1/DAYS_1
-    columns of the Discretizado sheet: both applications now derive working days
-    from one source (B3 holidays + working-day logic + Jan-1 fiscal weeks). Each
-    fiscal week is mapped to its calendar year via the imported FW + ANO columns,
-    so the FW→date mapping is exact even across a year boundary.
-
-    Each FW is counted at most once (dedup).
+    ``df`` supplies the FW + ANO columns that map each fiscal week to its calendar year, so the
+    mapping stays exact across a year boundary. Each fiscal week is counted at most once.
 
     Returns:
       { "status": "ok", "total_days": N, "days_by_fw": { fw: days } }
     """
-    filepath = Path(filepath)
-
     if not fws:
         return {"status": "ok", "total_days": 0, "days_by_fw": {}}
-
-    # ── DB override path ──────────────────────────────────────────────────────
-    if df_override is not None:
-        try:
-            year_by_fw = _build_fw_year_map(df_override)
-            dbf = calendar_445.days_by_fw_for_years(fws, year_by_fw)
-            return {"status": "ok", "total_days": sum(dbf.values()), "days_by_fw": dbf}
-        except Exception as exc:
-            logger.warning("Erro ao calcular days_by_fw (override): %s", exc)
-            return {"status": "ok", "total_days": 0, "days_by_fw": {}}
-
-    # ── Excel path (read FW + ANO to map each fiscal week to its year) ────────
-    df_for_year: "pd.DataFrame | None" = None
-    if filepath.exists():
-        try:
-            xl = pd.ExcelFile(filepath)
-            if "Discretizado" in xl.sheet_names:
-                df_for_year = xl.parse("Discretizado")
-        except Exception as exc:
-            logger.warning("Falha ao abrir Excel para mapear FW→ANO: %s", exc)
-
     try:
-        year_by_fw = _build_fw_year_map(df_for_year)
+        year_by_fw = _build_fw_year_map(df)
         dbf = calendar_445.days_by_fw_for_years(fws, year_by_fw)
         return {"status": "ok", "total_days": sum(dbf.values()), "days_by_fw": dbf}
     except Exception as exc:
         logger.warning("Erro ao calcular days_by_fw: %s", exc)
-        return {"status": "error", "message": str(exc)}
+        return {"status": "ok", "total_days": 0, "days_by_fw": {}}
+
+# ── HeadCount sheet ─────────────────────────────────────────────────────────
+# Read only by import_excel_to_db.import_headcount_to_db, which seeds Workstation / Person /
+# WorkstationPerson. The source project also carried a "matrix" layout (people as columns, one
+# True/False cell per allocation); the demo dataset is generated in the flat layout below, so
+# that branch was dropped rather than shipped as an unreachable parser.
+
+
+def _split_people(raw: Any) -> list[str]:
+    """Converte 'NOME A, NOME B, ...' em lista de nomes normalizados."""
+    if not raw or (isinstance(raw, float) and np.isnan(raw)):
+        return []
+    return [p.strip() for p in str(raw).split(",") if p.strip()]
+
+
+def _parse_headcount(df: pd.DataFrame) -> dict[str, dict]:
+    """
+    Lê a aba 'HeadCount' e retorna:
+      { wsn → { "people": [...], "qtde": int, "disp": float, "lh": float,
+                "turnos": int, "lm": int, "desc": str } }
+
+    Colunas: WSN, DESC, HEADCOUNT (nomes separados por vírgula), QTDE, DISP, LH, LM, TURNOS.
+    """
+    if df.empty or "WSN" not in df.columns:
+        logger.warning("HeadCount: coluna 'WSN' ausente — ignorando sheet.")
+        return {}
+
+    col_turnos = _find_col(df, ["TURNOS", "TURNO"])
+    col_lm     = _find_col(df, ["LM"])
+
+    result: dict[str, dict] = {}
+    for _, row in df.dropna(subset=["WSN"]).iterrows():
+        wsn = str(row["WSN"]).strip()
+        if not wsn:
+            continue
+        turnos_raw = row.get(col_turnos) if col_turnos else None
+        lm_raw     = row.get(col_lm)     if col_lm     else None
+        result[wsn] = {
+            "people": _split_people(row.get("HEADCOUNT")),
+            "qtde":   int(_safe_float(row.get("QTDE"), 0)),
+            "disp":   _safe_float(row.get("DISP"), 1.0),
+            "lh":     _safe_float(row.get("LH"), 0.0),
+            "turnos": int(_safe_float(turnos_raw, 0)) if turnos_raw is not None else 0,
+            "lm":     int(_safe_float(lm_raw, 0))     if lm_raw     is not None else 0,
+            "desc":   str(row.get("DESC") or "").strip(),
+        }
+    return result

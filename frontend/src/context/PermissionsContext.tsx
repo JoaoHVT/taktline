@@ -57,7 +57,7 @@ const PermissionsContext = createContext<PermissionsValue>({
   loading: true, refresh: () => {},
 })
 
-const CACHE_KEY = 'optvision.perm'
+const CACHE_KEY = 'taktline.perm'
 const VALID: UserRole[] = ['reader', 'editor', 'admin']
 
 function localPart(email: string | undefined): string {

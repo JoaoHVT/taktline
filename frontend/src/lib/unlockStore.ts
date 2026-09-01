@@ -1,7 +1,7 @@
 /**
  * unlockStore — module-level store for the ADMIN second-factor "unlock" grant.
  *
- * Sensitive operations (downloads, exports, Denodo, user management) require a
+ * Sensitive operations (downloads and exports) require a
  * short-lived grant obtained by POSTing ADMIN_PASSWORD to /api/admin/unlock. The
  * grant is replayed in the  X-Admin-Unlock  header by the axios interceptor and
  * expires ~15 min after issue ("unlock once per session"). This is a SEPARATE
@@ -12,7 +12,7 @@
  * so a page refresh within the window keeps the session unlocked.
  */
 
-const STORAGE_KEY = 'optvision.unlock'
+const STORAGE_KEY = 'taktline.unlock'
 
 let _token: string | null = null
 let _expiresAt = 0 // epoch ms

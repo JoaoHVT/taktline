@@ -3,13 +3,13 @@ services/optimizer.py
 ---------------------
 Modular Gurobi optimizer for workforce allocation.
 
-Mirrors the multi-phase MIP model in CapB3356103.py (_run_optimization_snapshot),
+Mirrors the multi-phase MIP model in the legacy desktop tool (_run_optimization_snapshot),
 but extracted into a standalone, reusable service with no PyQt5 or UI dependencies.
 
 Public API
 ----------
 check_gurobi()          → dict  – tests whether Gurobi is reachable
-build_snapshot(...)     → dict  – assembles solver input from Excel + payload
+build_snapshot(...)     → dict  – assembles solver input from the demand frame + payload
 run_optimization(...)   → dict  – runs the 6-phase Gurobi MIP and returns results
 """
 
@@ -53,7 +53,7 @@ def _ensure_gurobi() -> bool:
         gp, GRB, _GUROBI_AVAILABLE = None, None, False
     return _GUROBI_AVAILABLE
 
-# ── Constants (mirror CapB3356103.py) ────────────────────────────────────────
+# ── Constants (mirror the legacy desktop tool) ────────────────────────────────────────
 MAX_PHASES                        = 6
 DEFAULT_PHASE_LIMIT               = MAX_PHASES
 DEFAULT_GAP_PCT                   = 2.0
@@ -251,7 +251,7 @@ def check_gurobi() -> dict:
 # ── Snapshot assembly ────────────────────────────────────────────────────────
 
 def build_snapshot(
-    excel_path: str | Path,
+    df: Any,
     *,
     items: list[dict],
     top_pct: float = 90.0,
@@ -279,16 +279,13 @@ def build_snapshot(
     wsn_max_hours:  dict[str, float] | None = None,
     wsn_max_turnos: dict[str, int] | None = None,
     person_availability_pct: dict[str, float] | None = None,
-    df_override: Any | None = None,
     headcount_override: dict[str, dict] | None = None,
     expertise_enabled: bool = False,
     expertise_anchor: bool = False,
     expertise_speed: bool = False,
 ) -> dict:
     """
-    Builds the solver snapshot dict from the Excel file and request payload.
-    Equivalent to the snapshot assembly block in CapB3356103.py
-    (_prepare_optimization_snapshot_gurobi).
+    Builds the solver snapshot dict from the demand frame and the request payload.
 
     The snapshot is passed directly to run_optimization().
     """
@@ -296,10 +293,9 @@ def build_snapshot(
     # get_wsn_people_map was imported here but never called — dropped with the Item Rout cutover.
     from services.data_loader import load_and_prepare_data
 
-    excel_path = Path(excel_path)
-    data = load_and_prepare_data(excel_path, df_override=df_override, headcount_override=headcount_override)
+    data = load_and_prepare_data(df, headcount_override=headcount_override)
     if data.get("status") == "error":
-        raise RuntimeError(f"Erro ao ler Excel: {data['message']}")
+        raise RuntimeError(f"Erro ao preparar os dados: {data['message']}")
 
     if demand_by_wsn_explicit:
         demand_by_wsn: dict[str, float] = {k: float(v) for k, v in demand_by_wsn_explicit.items() if float(v) > 0}
@@ -577,7 +573,7 @@ def run_optimization(
 
     _log(f"[SETUP] Snapshot recebido: I={len(I)} WSNs, J={len(J)} pessoas")
     if not I:
-        _log("[ERRO] Nenhum WSN com demanda encontrado. Verifique o arquivo HorasB3.xlsx e os itens importados.")
+        _log("[ERRO] Nenhum WSN com demanda encontrado. Verifique os itens importados.")
         return {"status": "error", "message": "Sem WSNs com demanda para otimizar.", "wsns": [], "allocations": {}, "phase_metrics": [], "final_gap": None}
     if not J:
         _log("[ERRO] Nenhuma pessoa disponível para alocar. Verifique a aba HeadCount do Excel.")
@@ -771,7 +767,7 @@ def run_optimization(
     _prog(20, f"Criando modelo Gurobi — {len(qualified_pairs)} pares...")
 
     # ── Step 3: Build Gurobi model ───────────────────────────────
-    model = gp.Model("optvision_workforce")
+    model = gp.Model("taktline_workforce")
     model.Params.OutputFlag = 1
     model.Params.MIPGap     = gap_pct / 100.0
 

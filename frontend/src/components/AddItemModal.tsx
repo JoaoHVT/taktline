@@ -1,7 +1,7 @@
 /**
  * AddItemModal — "Adicionar Item por Família"
  *
- * Equivalent to AddAssemblyDialog in CapB3356103.py.
+ * Equivalent to AddAssemblyDialog in the original desktop tool.
  * Filters: Área | Família | Cliente | Pesquisar
  * Table columns: Área | Cliente | Família | ITEM | DESCRIÇÃO
  *

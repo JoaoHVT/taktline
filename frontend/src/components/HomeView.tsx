@@ -1,8 +1,7 @@
 'use client'
 import { useState } from 'react'
-import { CalendarRange, Gauge, KeyRound, LogOut } from 'lucide-react'
+import { CalendarRange, Gauge, LogOut } from 'lucide-react'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
-import { ChangePasswordModal } from '@/components/ChangePasswordModal'
 import { useAuth } from '@/hooks/useAuth'
 
 interface Props {
@@ -27,7 +26,6 @@ interface ModuleCard {
 export function HomeView({ onOpenAnalise, onOpenGantt }: Props) {
   const { currentUser, logout } = useAuth()
   const [confirmLogout, setConfirmLogout] = useState(false)
-  const [showChangePw,  setShowChangePw]  = useState(false)
 
   const modules: ModuleCard[] = [
     {
@@ -53,13 +51,6 @@ export function HomeView({ onOpenAnalise, onOpenGantt }: Props) {
         {currentUser && (
           <>
             <span className="text-xs text-white/50 mr-1">{currentUser.name || currentUser.username}</span>
-            <button
-              onClick={() => setShowChangePw(true)}
-              title="Alterar senha"
-              className="p-2 rounded-lg border border-white/15 text-white/70 hover:text-white hover:border-white/30 transition-colors"
-            >
-              <KeyRound size={16} />
-            </button>
             <button
               onClick={() => setConfirmLogout(true)}
               title="Sair"
@@ -95,9 +86,6 @@ export function HomeView({ onOpenAnalise, onOpenGantt }: Props) {
         </div>
       </div>
 
-      {showChangePw && currentUser && (
-        <ChangePasswordModal onClose={() => setShowChangePw(false)} />
-      )}
 
       {confirmLogout && currentUser && (
         <ConfirmDialog

@@ -8,7 +8,7 @@ import { ConfirmDialog } from './ConfirmDialog'
 import { useWorkspace } from '@/context/WorkspaceContext'
 
 // ── AssemblyBlock ─────────────────────────────────────────────────────────────
-// Mirrors PyQt5 AssemblyWidget from CapB3356103.py.
+// Mirrors PyQt5 AssemblyWidget from the original desktop tool.
 //
 // Layout:
 //   LEFT  (flex-3): name bar (item + description)  +  scope columns

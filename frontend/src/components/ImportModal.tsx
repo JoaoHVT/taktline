@@ -1,7 +1,7 @@
 ﻿/**
  * ImportModal — "Simular demanda do plano mensal"
  *
- * Equivalent to open_alert_flow() in CapB3356103.py.
+ * Equivalent to open_alert_flow() in the original desktop tool.
  * Filter bar order: Mensal/Semanal | Ano | Mês | FW | Cliente | Família | Pesquisar
  * Table columns: Área | Cliente | Família | ITEM | DESCRIÇÃO
  */
@@ -274,7 +274,7 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
   // ── Month→FW map (populated once on initial load, no extra API calls) ─────
-  // Mirrors _list_available_fw_values() in CapB3356103.py: the backend groups
+  // Mirrors _list_available_fw_values() in the original desktop tool: the backend groups
   // the DataFrame by month and returns FW lists per month in one go.
   const [mesFwMap, setMesFwMap] = useState<Record<number, string[]>>({})
 

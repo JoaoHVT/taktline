@@ -10,7 +10,6 @@ import { FactoryLoadShareProvider } from '@/context/FactoryLoadShareContext'
 import { FactoryLoadHome } from '@/components/FactoryLoadHome'
 import { AssemblyBlock } from '@/components/AssemblyBlock'
 import { LoginModal }    from '@/components/LoginModal'
-import { UnlockModal }   from '@/components/UnlockModal'
 import { LockoutOverlay } from '@/components/LockoutOverlay'
 import { BlockedOverlay } from '@/components/BlockedOverlay'
 import { HomeView }      from '@/components/HomeView'
@@ -1136,8 +1135,6 @@ export default function Home() {
       {/* Login modal blocks the entire UI until authenticated */}
       {(!isAuthenticated || sessionExpired) && <LoginModal sessionExpired={sessionExpired} />}
 
-      {/* Admin second-factor prompt — self-shows when a sensitive request needs an unlock */}
-      <UnlockModal />
 
       {/* Failed-password lockout — generic notice + UI privilege revocation */}
       <LockoutOverlay />

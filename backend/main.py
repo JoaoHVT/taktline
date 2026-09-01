@@ -4,7 +4,6 @@ import uuid
 import asyncio
 import json
 import logging
-import tempfile
 import threading
 from datetime import datetime, timezone, timedelta, date
 from collections import Counter
@@ -24,12 +23,12 @@ logger = logging.getLogger(__name__)
 # session-signing secret for a derived fallback and disabling the DB engine. The path is resolved by env_paths (not
 # from the cwd) so `uvicorn main:app` works from any working directory, and
 # override=True lets the .env win over stale values inherited from the parent
-# shell. Platform-injected vars (Railway) still work: no candidate file exists
+# shell. Platform-injected vars still work: no candidate file exists
 # there, so this is a no-op.
 #
 # env_paths is the ONE exception to "no project module before load_dotenv": it
 # imports only the standard library and reads no configuration at import time.
-# It exists because the secrets must not sit in the OneDrive-synced tree — see
+# It exists because the secrets must not sit in the synced folder — see
 # the SECURITY note in that module.
 try:
     from dotenv import load_dotenv
@@ -47,7 +46,7 @@ if _ENV_PATH is not None:
 
 import pandas as pd
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException, UploadFile, File, Form, Query, Depends, Body, Request
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, BackgroundTasks, HTTPException, Query, Depends, Body, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import JSONResponse, FileResponse
@@ -57,18 +56,13 @@ from sqlalchemy import text, func, or_, case
 from services.auth import (
     require_auth as _base_require_auth,
     validate_bearer_token,
-    hash_password,
     verify_password,
-    generate_password,
     issue_session_token,
-    validate_password_strength,
     normalize_email,
     display_name_of,
-    ALLOWED_DOMAIN,
-    PASSWORD_MIN_LEN,
     SESSION_TTL_S,
 )
-from services.data_loader import load_and_prepare_data, load_default_excel, get_items_for_import, get_items_catalog, compute_capacity_stats, get_wsn_people_map, get_period_days
+from services.data_loader import get_items_for_import, get_items_catalog, compute_capacity_stats, get_wsn_people_map, get_period_days
 from services.assembly_details import get_assembly_details
 # Same key normalisation the resolver uses, so an explicit-demand payload keys on exactly
 # what get_assembly_details() looks up.
@@ -82,59 +76,26 @@ from services.optimizer import check_gurobi, build_snapshot, run_optimization
 # ── Optional DB imports (graceful fallback when DB is not configured) ────────
 try:
     from database import get_db, engine as db_engine, is_available as db_is_available, check_connection as db_check_connection
-    from models import Base, MonthlyDemand, SolverJob, ScheduleRow, LocosRout, DbConfig, ItensRout, PlanoProd, ScheduleOverride, ScenarioSaturdayWorkday, ProjectionBaseline, LogisticaBase, GcrPlanSnapshot, TransactedHoursSnapshot, UserPermission, SecurityEvent, AuthThrottle, CalendarOverride, FiscalWeekOverride, Workstation, Person, WorkstationPerson, PersonLeave, AppSetting, AccessRequest, get_active_ver
-    from import_excel_to_db import import_excel_to_db
-    from import_excel_to_db import import_schedule_to_db, import_locos_rout_to_db
-    from import_excel_to_db import import_itens_rout_to_db, import_plano_prod_to_db
-    from import_excel_to_db import import_headcount_to_db
-    from import_excel_to_db import IMPORT_MODES
+    from models import (
+        Base, MonthlyDemand, SolverJob, ScheduleRow, LocosRout, DbConfig, ItensRout, PlanoProd,
+        ScheduleOverride, ScenarioSaturdayWorkday, ProjectionBaseline, UserPermission,
+        SecurityEvent, AuthThrottle, CalendarOverride, FiscalWeekOverride, Workstation, Person,
+        WorkstationPerson, PersonLeave, AppSetting, get_active_ver,
+    )
     _DB_AVAILABLE = True
 except Exception as _db_import_exc:
     _DB_AVAILABLE = False
     _db_import_exc_msg = str(_db_import_exc)
-    IMPORT_MODES = ("replace", "append")  # keep the endpoint validation self-sufficient
 else:
     _db_import_exc_msg = ""
 
 # (.env is loaded at the very top of this module — see _ENV_PATH.)
 
-# ── In-memory registry for background import jobs ────────────────────────────
-_import_jobs: dict[str, dict] = {}
-
-# Per-table import lock: at most ONE active import per table_key at any time.
-# Maps table_key → job_id of the currently-active (running OR cancelling) import.
-# This is the server-side guard that prevents the duplicate-records race where a
-# cancelled-but-not-yet-stopped import thread and a freshly started one write into
-# the SAME staging `ver` concurrently. A new import for a table whose previous job
-# is still active is rejected (HTTP 409) until that job reaches a terminal state.
-# Guarded by _import_lock_mutex so check-and-set is atomic across request threads.
-_import_active: dict[str, str] = {}
-_import_lock_mutex = threading.Lock()
 
 
-def _try_acquire_import_slot(table_key: str, job_id: str) -> str | None:
-    """Atomically claim the import slot for `table_key`. Returns None on success,
-    or the job_id of the still-active import that blocks this one."""
-    with _import_lock_mutex:
-        active = _import_active.get(table_key)
-        if active is not None:
-            existing = _import_jobs.get(active)
-            # Stale slot (job vanished or already terminal) → reclaim it.
-            if existing is None or existing.get("status") in ("done", "error", "cancelled"):
-                _import_active[table_key] = job_id
-                return None
-            return active
-        _import_active[table_key] = job_id
-        return None
 
 
-def _release_import_slot(table_key: str, job_id: str) -> None:
-    """Release the import slot for `table_key` IFF still held by `job_id`.
-    Called from the worker's finally block so the slot is freed exactly when the
-    job ends (done/error/cancelled), never leaving an orphaned lock."""
-    with _import_lock_mutex:
-        if _import_active.get(table_key) == job_id:
-            del _import_active[table_key]
+
 
 _last_db_error: str = ""  # stores the most recent _db_to_df error for /api/db/debug/teste
 
@@ -158,9 +119,6 @@ def _split_read_mode() -> str:
     return "auto"
 
 
-def _split_read_enabled() -> bool:
-    """Whether the split read path is preferred (reported by the parity endpoint)."""
-    return _split_read_mode() != "off"
 
 
 def _db_to_df_legacy() -> "pd.DataFrame | None":
@@ -226,7 +184,7 @@ def _db_to_df() -> "pd.DataFrame | None":
 # _db_to_df_split() rebuilds the wide Discretizado-equivalent frame from two
 # SELECTs plus one json.loads per row. Measured on prod-sized data (2.7k rows,
 # 1.35 MB): ~700 ms per call, of which ~87% is network round trips (NullPool
-# opens a fresh TLS connection to the Supabase pooler on every request) and only
+# opens a fresh connection on every request) and only
 # ~13% Python. Seven endpoints call _capacity_source_df() and each paid that in
 # full, on every request — there was no cache on this path, unlike the Gantt.
 #
@@ -254,10 +212,8 @@ def _capacity_source_df() -> "pd.DataFrame | None":
 
     DB-SPLIT-FIRST policy: when the split read is enabled (default 'auto') and the
     split tables (itens_rout + plano_prod) hold data, return the reconstructed
-    wide frame so the app reads the two normalized uploads, NOT the bundled
-    HorasB3.xlsx. Returns None when the split is empty/disabled — the caller then
-    falls back to reading the local Excel exactly as before (no behaviour change
-    when the split tables are not populated, or when DISCRETIZADO_SPLIT_READ=0).
+    wide frame. Returns None when the split is empty or disabled — the caller then
+    falls back to the raw monthly_demand table (see _demand_df).
     """
     if _split_read_mode() == "off":
         return None
@@ -270,6 +226,26 @@ def _capacity_source_df() -> "pd.DataFrame | None":
         logger.info("[DB] _capacity_source_df: servindo via split (%d linhas).", split_df.shape[0])
         return split_df
     return None
+
+
+def _demand_df() -> "pd.DataFrame":
+    """The demand frame every capacity endpoint reads, or a 503.
+
+    Two sources, in order: the normalized split (itens_rout + plano_prod) when it holds data,
+    then the raw monthly_demand table. There is no file fallback of any kind — the database is
+    the only source the demo has, and an empty one is an error worth reporting rather than a
+    screen full of zeros that reads like an answer.
+    """
+    df = _capacity_source_df()
+    if df is None:
+        df = _db_to_df()
+    if df is None or df.empty:
+        raise HTTPException(
+            status_code=503,
+            detail="Dados de demanda indisponiveis no banco.",
+        )
+    return df
+
 
 
 def _period_working_dates(fws: list[str] | None, df: object = None) -> list:
@@ -534,108 +510,10 @@ def _db_to_df_split(use_cache: bool = True) -> "pd.DataFrame | None":
         return None
 
 
-def _row_multiset(df: "pd.DataFrame", cols: list[str]) -> Counter:
-    """Hash each row (NaN→null, sorted keys) into an order-independent multiset.
-
-    Row ORDER is not part of the Discretizado contract — every consumer groups /
-    filters by content, never by position — so parity is a SET equality, not a
-    positional one. Legacy returns Postgres physical order; the split returns
-    sheet (__rid) order, so a positional diff is a false negative. Hashing rows
-    and comparing as multisets is the correct equivalence test.
-    """
-    import json as _json, hashlib as _hl
-    out: Counter = Counter()
-    sub = df.copy()
-    sub.columns = [str(c) for c in sub.columns]
-    sub = sub[cols]
-    for _, row in sub.iterrows():
-        norm: dict = {}
-        for c in cols:
-            v = row[c]
-            try:
-                if pd.isna(v):
-                    v = None
-            except (TypeError, ValueError):
-                pass
-            if hasattr(v, "item"):
-                try:
-                    v = v.item()
-                except Exception:
-                    pass
-            norm[c] = v
-        h = _hl.md5(_json.dumps(norm, sort_keys=True, ensure_ascii=False, default=str).encode()).hexdigest()
-        out[h] += 1
-    return out
 
 
-def _split_parity_report() -> dict:
-    """Compare ``_db_to_df_legacy`` (flat) vs ``_db_to_df_split`` (re-merged).
 
-    Go/no-go gate for the split read path. Confirms the split reconstructs the
-    SAME SET of rows (order-independent: see _row_multiset). Reports shape /
-    column diffs and, when the multisets differ, how many rows are unique to each
-    side. Also keeps a positional value-mismatch diagnostic (expected non-zero
-    purely from row-order differences — informational only, NOT the gate).
-    """
-    legacy = _db_to_df_legacy()
-    split  = _db_to_df_split(use_cache=False)   # parity must read the DB, not the cache
-    if legacy is None or split is None:
-        return {"status": "error", "message": "DB indisponivel para uma das fontes."}
-
-    rep: dict = {
-        "status": "ok",
-        "split_read_enabled": _split_read_enabled(),
-        "legacy_shape": list(legacy.shape),
-        "split_shape": list(split.shape),
-        "rows_match": legacy.shape[0] == split.shape[0],
-    }
-    legacy_cols = set(map(str, legacy.columns))
-    split_cols  = set(map(str, split.columns))
-    rep["missing_in_split"] = sorted(legacy_cols - split_cols)
-    rep["extra_in_split"]   = sorted(split_cols - legacy_cols)
-
-    # Order-independent multiset equality on the common columns — the real gate.
-    common_cols = sorted(legacy_cols & split_cols)
-    multiset_equal = False
-    try:
-        lc = _row_multiset(legacy, common_cols)
-        sc = _row_multiset(split,  common_cols)
-        multiset_equal = (lc == sc)
-        if not multiset_equal:
-            rep["rows_only_in_legacy"] = sum((lc - sc).values())
-            rep["rows_only_in_split"]  = sum((sc - lc).values())
-    except Exception as exc:
-        logger.warning("parity multiset compare: %s", exc)
-        rep["multiset_error"] = str(exc)
-    rep["multiset_equal"] = multiset_equal
-
-    # Positional diagnostic only (expected >0 from row-order differences).
-    mismatches: dict[str, int] = {}
-    if legacy.shape[0] == split.shape[0]:
-        l = legacy.reset_index(drop=True)
-        s = split.reset_index(drop=True)
-        for c in [c for c in legacy.columns if str(c) in split_cols]:
-            try:
-                a = l[c]; b = s[c]
-                neq = (a.values != b.values)
-                both_nan = a.isna().values & b.isna().values
-                diff = int((neq & ~both_nan).sum())
-                if diff:
-                    mismatches[str(c)] = diff
-            except Exception as exc:
-                mismatches[str(c)] = -1
-                logger.warning("parity compare col %s: %s", c, exc)
-    rep["positional_value_mismatches"] = mismatches
-
-    rep["parity_ok"] = (
-        rep["rows_match"]
-        and not rep["missing_in_split"]
-        and not rep["extra_in_split"]
-        and multiset_equal
-    )
-    return rep
-
-# Garante que o CapB335610 pode ser importado
+# Garante que os módulos do backend possam ser importados
 sys.path.insert(0, str(Path(__file__).parent))
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
@@ -670,7 +548,7 @@ ws_queues: dict[str, list[asyncio.Queue]] = {}
 
 
 # ── Access-log noise filter ──────────────────────────────────────────────────
-# Railway bills log ingestion. Liveness endpoints are by far the chattiest thing
+# Log volume is not free. Liveness endpoints are by far the chattiest thing
 # here and the least informative: the keepalive cron pings every 5 min through the
 # working day, and every open tab probes /api/health on its own beat. Each SUCCESS
 # writes an access-log line that says only "the server is up", which the next line
@@ -712,106 +590,11 @@ async def lifespan(app: FastAPI):
         except Exception as _e:
             logger.warning("[startup] create_all: %s", _e)
 
-        # ── 1b. Defense-in-depth for Supabase: enable RLS on EVERY table ──────
-        # Supabase auto-exposes a PostgREST REST API (anon/authenticated roles). The
-        # app talks to Postgres directly as the owning `postgres` role, which BYPASSES
-        # RLS — so enabling RLS with NO policies denies anon/authenticated everything
-        # via PostgREST while leaving the app unaffected. This closes the gap where
-        # tables created by create_all (user_permissions, monthly_demand, …) would
-        # otherwise be reachable with only the public anon key. Idempotent.
-        for _tbl in Base.metadata.tables:
-            try:
-                with db_engine.begin() as _conn:
-                    _conn.execute(text(f'ALTER TABLE "{_tbl}" ENABLE ROW LEVEL SECURITY'))
-            except Exception as _re:
-                logger.warning("[startup] enable RLS on %s: %s", _tbl, _re)
+        # The schema is built by create_all above and nothing else: the demo database is
+        # generated from the current models by tools/make_demo_data.py and recreated from the
+        # seed on every boot, so there is no older database in the world to migrate forward.
 
-        # ── 2. Idempotent schema migrations for legacy databases ───────────────
-        # Each DDL runs in its own session so one failure doesn't block others.
-        _MIGRATIONS = [
-            # schedule optional columns
-            "ALTER TABLE schedule ADD COLUMN IF NOT EXISTS linha TEXT",
-            "ALTER TABLE schedule ADD COLUMN IF NOT EXISTS finish_ms TEXT",
-            # Contratual — display-only contractual finish date (never read by the scheduler)
-            "ALTER TABLE schedule ADD COLUMN IF NOT EXISTS contract_ms TEXT",
-            # staged-import ver column (NOT NULL DEFAULT 0 makes existing rows ver=0)
-            "ALTER TABLE monthly_demand ADD COLUMN IF NOT EXISTS ver INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE schedule      ADD COLUMN IF NOT EXISTS ver INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE locos_rout    ADD COLUMN IF NOT EXISTS ver INTEGER NOT NULL DEFAULT 0",
-            # locos_rout optional columns
-            "ALTER TABLE locos_rout    ADD COLUMN IF NOT EXISTS descricao TEXT",
-            "ALTER TABLE locos_rout    ADD COLUMN IF NOT EXISTS workorder TEXT",
-            # Plano de Produção pass-through columns (PART DESC / ESCOPO / LINHA)
-            "ALTER TABLE locos_rout    ADD COLUMN IF NOT EXISTS part_desc TEXT",
-            "ALTER TABLE locos_rout    ADD COLUMN IF NOT EXISTS escopo TEXT",
-            "ALTER TABLE locos_rout    ADD COLUMN IF NOT EXISTS linha TEXT",
-            # monthly_demand optional columns
-            "ALTER TABLE monthly_demand ADD COLUMN IF NOT EXISTS lh DOUBLE PRECISION",
-            "ALTER TABLE monthly_demand ADD COLUMN IF NOT EXISTS lm INTEGER",
-            "ALTER TABLE monthly_demand ADD COLUMN IF NOT EXISTS turnos INTEGER",
-            # user_permissions: roster + banned + lockout-history columns (readers now persisted)
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS is_blocked BOOLEAN NOT NULL DEFAULT FALSE",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS created_at TIMESTAMP",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS last_login TIMESTAMP",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS last_activity TIMESTAMP",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS lockout_count INTEGER NOT NULL DEFAULT 0",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS last_lockout_at TIMESTAMP",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS warning_ack_at TIMESTAMP",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS last_role_change_at TIMESTAMP",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS last_role_change_by TEXT",
-            # user_permissions: local credential (Azure AD / Entra ID replacement).
-            # All NULLABLE with no backfill here — every pre-existing row keeps its username
-            # and role and gets a generated password in _bootstrap_local_credentials(), which
-            # runs once below and is the only place that may write a hash for an account whose
-            # owner never chose one.
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS email TEXT",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS password_hash TEXT",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS password_set_at TIMESTAMP",
-            "ALTER TABLE user_permissions ADD COLUMN IF NOT EXISTS must_change_password "
-            "BOOLEAN NOT NULL DEFAULT FALSE",
-            # security_events: admin-notification acknowledgement metadata (NULL = active alert)
-            "ALTER TABLE security_events ADD COLUMN IF NOT EXISTS acknowledged_at TIMESTAMP",
-            "ALTER TABLE security_events ADD COLUMN IF NOT EXISTS acknowledged_by TEXT",
-            # security_events: machine-readable change payload, forensics only — never returned by
-            # any endpoint (see SecurityEvent.detail_json).
-            "ALTER TABLE security_events ADD COLUMN IF NOT EXISTS detail_json TEXT",
-            # The alerts badge counts ACTIVE alerts (acknowledged_at IS NULL) — a tiny,
-            # roughly constant subset of a table that is append-only and never pruned.
-            # These columns arrived via ALTER TABLE, so the model's index=True never
-            # materialized here (create_all only builds indexes for tables it creates):
-            # the count was a sequential scan growing with total audit history forever.
-            # A PARTIAL index covers exactly the rows the badge asks about, so the query
-            # cost tracks the number of UNACKED alerts, not the size of the trail.
-            "CREATE INDEX IF NOT EXISTS ix_security_events_active ON security_events (id) "
-            "WHERE acknowledged_at IS NULL",
-            # person: home area (B1/B2/B3/WGS), mirroring workstation.area
-            "ALTER TABLE person ADD COLUMN IF NOT EXISTS area TEXT",
-            # Expertise levels (0–3). Both NULLABLE with no default on purpose: NULL means
-            # "never assessed", which is exactly the state every existing row is in, and it is
-            # read as 0. No backfill — inventing a level for 55×58 pairs would look like data
-            # the supervision never entered, and the run-level toggle is what keeps the
-            # unfilled matrix from changing any result meanwhile.
-            "ALTER TABLE workstation ADD COLUMN IF NOT EXISTS required_level INTEGER",
-            "ALTER TABLE workstation_person ADD COLUMN IF NOT EXISTS expertise_level INTEGER",
-            # Provenance of an expertise level (see WorkstationPerson.expertise_source).
-            "ALTER TABLE workstation_person ADD COLUMN IF NOT EXISTS expertise_source TEXT",
-            "ALTER TABLE workstation_person ADD COLUMN IF NOT EXISTS expertise_answers TEXT",
-            "ALTER TABLE workstation_person ADD COLUMN IF NOT EXISTS expertise_updated_at TIMESTAMP",
-            "ALTER TABLE workstation_person ADD COLUMN IF NOT EXISTS expertise_updated_by TEXT",
-            # Provenance of a workstation's TARGET level (see Workstation.required_source).
-            "ALTER TABLE workstation ADD COLUMN IF NOT EXISTS required_source TEXT",
-            "ALTER TABLE workstation ADD COLUMN IF NOT EXISTS required_answers TEXT",
-            "ALTER TABLE workstation ADD COLUMN IF NOT EXISTS required_updated_at TIMESTAMP",
-            "ALTER TABLE workstation ADD COLUMN IF NOT EXISTS required_updated_by TEXT",
-        ]
-        for _ddl in _MIGRATIONS:
-            try:
-                with get_db() as _mdb:
-                    _mdb.execute(text(_ddl))
-            except Exception as _e:
-                logger.warning("[startup] Migration skipped: %s — %s", _ddl[:70], _e)
-
-        # ── 3. Seed db_config active-version pointers if missing ──────────────
+        # ── 2. Seed db_config active-version pointers if missing ──────────────
         # Ensures existing rows at ver=0 are immediately readable without an import.
         for _tbl in ["monthly_demand", "schedule", "locos_rout"]:
             try:
@@ -822,7 +605,7 @@ async def lifespan(app: FastAPI):
             except Exception as _e:
                 logger.warning("[startup] db_config seed(%s): %s", _tbl, _e)
 
-        # ── 4. Prune solver_jobs older than 24 h ──────────────────────────────
+        # ── 3. Prune solver_jobs older than 24 h ──────────────────────────────
         try:
             from datetime import datetime, timezone, timedelta
             cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
@@ -831,30 +614,7 @@ async def lifespan(app: FastAPI):
         except Exception as _e:
             logger.warning("[startup] Prune solver_jobs: %s", _e)
 
-        # ── 5. Seed the initial Admin if NO admin exists yet ───────────────────
-        # Guarantees there is always at least one administrator who can manage users
-        # (recovery seed — only runs when the admin set is empty).
-        try:
-            with get_db() as _adb:
-                has_admin = _adb.query(UserPermission).filter(UserPermission.role == "admin").first()
-                if not has_admin:
-                    _adb.add(UserPermission(username=_INITIAL_ADMIN, role="admin"))
-                    logger.info("[startup] Seeded initial admin: %s", _INITIAL_ADMIN)
-        except Exception as _e:
-            logger.warning("[startup] Seed initial admin: %s", _e)
-
-        # ── 5b. Give every pre-existing account a local password ───────────────
-        # The Entra ID replacement: accounts that used to authenticate against Azure have
-        # no password of their own. This generates one per account, keeping username, role,
-        # block state and history exactly as they are, and writes the plaintext ONCE to a
-        # local file for the admin to distribute. Defined further down (see the local-auth
-        # section); the name resolves at call time.
-        try:
-            _bootstrap_local_credentials()
-        except Exception as _e:
-            logger.warning("[startup] Bootstrap de credenciais locais: %s", _e)
-
-    # ── 6. Load the admin-editable working-calendar overrides into the engine ──
+    # ── 5. Load the admin-editable working-calendar overrides into the engine ──
     # Done unconditionally (even DB-down → empty snapshot) so calendar_445 always has
     # a defined override state before the first Gantt/KPI computation.
     try:
@@ -873,7 +633,7 @@ async def lifespan(app: FastAPI):
 # are re-served below, gated by HTTP Basic Auth (DOCS_USER / DOCS_PASSWORD). With
 # those env vars unset, the docs stay completely unavailable (404) — default-secure.
 app = FastAPI(
-    title="CapB API",
+    title="the legacy tool API",
     version="1.0.0",
     lifespan=lifespan,
     docs_url=None,
@@ -888,12 +648,12 @@ def _parse_origins(raw: str) -> list[str]:
     """FRONTEND_URL → list of exact origins.
 
     Accepts a COMMA-SEPARATED list, because one deployment legitimately has more than one
-    front door (the production Vercel domain plus a custom domain, say). Each entry is
+    front door (the production domain plus a custom domain, say). Each entry is
     normalised: surrounding whitespace and any trailing slash are removed.
 
     That normalisation is not cosmetic. A CORS origin match is a byte-for-byte string
     comparison against the browser's `Origin` header, which NEVER carries a trailing slash
-    or a path. Pasting "https://app.vercel.app/" out of the address bar therefore matches
+    or a path. Pasting "https://app.example.com/" out of the address bar therefore matches
     nothing, every preflight is answered 400, and the whole application goes dark from the
     browser's point of view while the server itself looks perfectly healthy in the logs.
     That exact outage is why this function exists.
@@ -916,8 +676,8 @@ if _local_ip:
 # LAN-testing machine, and a repeated entry only makes the startup log harder to read.
 _origins = list(dict.fromkeys(_origins))
 
-# Compress responses to cut egress (Railway bills on network out). JSON payloads
-# like /api/gantt/data and the Denodo datasets are highly repetitive → gzip shrinks
+# Compress responses to cut egress. JSON payloads
+# like /api/gantt/data are highly repetitive → gzip shrinks
 # them ~80-90%. Only bodies ≥ 1 KB are compressed (tiny replies aren't worth it).
 # Browsers/EventSource decompress transparently, so SSE and normal JSON both work.
 app.add_middleware(GZipMiddleware, minimum_size=1024)
@@ -937,11 +697,11 @@ app.add_middleware(
 
 # Wildcard CORS in production is a hardening gap (any web origin may attempt
 # token-bearing calls). Data is still protected by bearer auth, but FRONTEND_URL
-# should be pinned to the exact Vercel origin. Warn loudly if left as "*".
+# should be pinned to the exact frontend origin. Warn loudly if left as "*".
 if _allow_all_origins and ENVIRONMENT == "production":
     logger.warning(
         "[security] CORS allow_origins='*' in production — set FRONTEND_URL to the "
-        "exact frontend origin (e.g. https://<app>.vercel.app)."
+        "exact frontend origin (e.g. https://app.example.com)."
     )
 
 # Always state the effective allow-list at boot. A mis-set FRONTEND_URL does not crash
@@ -967,7 +727,7 @@ if ENVIRONMENT == "production" and not _allow_all_origins and not any(
 # ── Security response headers (defense-in-depth on the API surface) ──────────
 # The Next.js frontend already sets CSP + hardening headers on its OWN origin
 # (frontend/next.config.ts). The API responses were missing an equivalent baseline, so
-# per-user JSON (/permissions/me, the admin roster, Denodo datasets, error bodies) could be
+# per-user JSON (/permissions/me, error bodies) could be
 # written to a shared/browser DISK cache and read later, MIME-sniffed, or framed. This adds
 # the matching minimum:
 #   • Cache-Control: no-store — the highest-value item: API payloads are per-user and often
@@ -1001,7 +761,7 @@ async def _apply_security_headers(request, call_next):
         )
     # Strip server-version disclosure (uvicorn/Starlette default banner).
     if "server" in response.headers:
-        response.headers["server"] = "OptVision"
+        response.headers["server"] = "Taktline"
     return response
 
 
@@ -1030,7 +790,7 @@ async def require_auth(request: Request, user: dict = Depends(_base_require_auth
 # The public Swagger/OpenAPI is disabled (see FastAPI(...) above). These custom
 # routes re-expose /docs, /redoc and /openapi.json but ONLY to whoever holds the
 # DOCS_USER / DOCS_PASSWORD credentials — a SEPARATE secret from the app's Azure
-# login, so ordinary users (even other @wabtec accounts) cannot reach them. A
+# login, so ordinary users cannot reach them. A
 # browser navigation to /docs triggers the native Basic-Auth prompt; the browser
 # reuses the same credentials for the /openapi.json fetch Swagger UI then makes.
 # If the env vars are unset, the docs behave as if they don't exist (404).
@@ -1112,22 +872,15 @@ from fastapi import Security
 from fastapi.security import APIKeyHeader
 
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "").strip()
-_UNLOCK_TTL_S  = 15 * 60
 _unlock_header = APIKeyHeader(name="X-Admin-Unlock", auto_error=False)
 
 
 def _unlock_secret() -> bytes:
     """HMAC key for unlock grants, derived from ADMIN_PASSWORD so that rotating the
     password immediately invalidates every outstanding grant."""
-    return _hashlib.sha256(("optvision-unlock|" + ADMIN_PASSWORD).encode("utf-8")).digest()
+    return _hashlib.sha256(("taktline-unlock|" + ADMIN_PASSWORD).encode("utf-8")).digest()
 
 
-def _issue_unlock_token(email: str) -> tuple[str, int]:
-    exp = int(_utime.time()) + _UNLOCK_TTL_S
-    payload = f"{email}|{exp}"
-    sig = _hmac.new(_unlock_secret(), payload.encode("utf-8"), _hashlib.sha256).hexdigest()
-    token = _b64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii") + "." + sig
-    return token, _UNLOCK_TTL_S
 
 
 def _verify_unlock_token(token: str, email: str) -> bool:
@@ -1165,13 +918,6 @@ def _enforce_unlock(user: dict, token: str | None) -> None:
         )
 
 
-def require_unlock(
-    user: dict = Depends(require_auth),
-    token: str | None = Security(_unlock_header),
-) -> dict:
-    """Second factor only (any authenticated user + valid unlock grant)."""
-    _enforce_unlock(user, token)
-    return user
 
 
 def require_editor_unlock(
@@ -1189,18 +935,6 @@ def require_editor_unlock(
     return user
 
 
-def require_admin_unlock(
-    request: Request,
-    user: dict = Depends(require_auth),
-    token: str | None = Security(_unlock_header),
-) -> dict:
-    """Authorization (Admin) AND the second factor."""
-    _check_pw_lockout(user)  # locked → generic 429 (wins over role / second-factor errors)
-    if _current_role(user) != "admin":
-        _record_perm_denied(user, request, "admin")
-        raise HTTPException(status_code=403, detail="Acesso restrito a administradores.")
-    _enforce_unlock(user, token)
-    return user
 
 
 
@@ -1210,24 +944,12 @@ def require_admin_unlock(
 # decorated, so a handler declared above the definition would fail at import with a
 # NameError. (`_current_role` is still a forward reference, but that one resolves at call
 # time inside the body, which is fine.)
-def require_editor(request: Request, user: dict = Depends(require_auth)) -> dict:
-    """Dependency: allow Editors and Admins only (write access to schedule edits/imports)."""
-    if _current_role(user) not in ("editor", "admin"):
-        _record_perm_denied(user, request, "editor")
-        raise HTTPException(status_code=403, detail="Permissão de edição necessária.")
-    return user
 
 
-def require_admin(request: Request, user: dict = Depends(require_auth)) -> dict:
-    """Dependency: allow Admins only (user management)."""
-    if _current_role(user) != "admin":
-        _record_perm_denied(user, request, "admin")
-        raise HTTPException(status_code=403, detail="Acesso restrito a administradores.")
-    return user
 
 
 # ── Brute-force protection: per-user rate limit + failed-password lockout ─────
-# In-memory (single Railway instance; counters reset on restart — acceptable). All
+# In-memory (a single instance; counters reset on restart — acceptable). All
 # keyed on the caller's stable identity (oid, falling back to email). Two layers:
 #   • rate limit  — caps request VOLUME per minute (any outcome) on password routes;
 #   • lockout     — after 5 CONSECUTIVE wrong passwords (admin OR import) the user is
@@ -1238,7 +960,7 @@ _RL_WINDOW_S   = 60
 _RL_MAX        = 10          # max password-route attempts per user per minute
 # In-memory copies are a FALLBACK only (used when the DB is unavailable). The
 # authoritative store is the `auth_throttle` table so the lockout/rate-limit survive
-# restarts, redeploys, and Railway scale-to-zero cold starts (see AuthThrottle).
+# restarts, redeploys, and scale-to-zero cold starts (see AuthThrottle).
 _pw_fail_counts: dict[str, int]   = {}
 _pw_lockout_until: dict[str, float] = {}
 _rl_hits: dict[str, list[float]]  = {}
@@ -1631,7 +1353,7 @@ def gurobi_check(_user: dict = Depends(require_auth)):
 def test_gurobi(_user: dict = Depends(require_auth)):
     """
     Executa um modelo mínimo para validar import + runtime + licença do Gurobi.
-    Útil para diagnosticar problemas de deploy no Railway.
+    Útil para diagnosticar problemas de deploy.
     """
     try:
         import gurobipy as gp
@@ -1660,45 +1382,6 @@ def test_gurobi(_user: dict = Depends(require_auth)):
             "error": str(exc),
             "message": "Falha ao executar modelo mínimo do Gurobi.",
         }
-
-
-# ── Denodo endpoints ─────────────────────────────────────────────
-# Generic Denodo dataset browser. Credentials are received per request and used
-# only to open that single connection — they are NEVER stored server-side.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# ── Server-side prévia cache ────────────────────────────────────────────────────────────
-# The save used to re-run the whole Denodo query, purely so the stored rows could not be
-# dictated by the client. That property is what matters, not the second warehouse hit — so
-# the prévia's own SERVER-BUILT summary is parked here under an opaque token and the save
-# consumes the token. The client never holds the rows and cannot alter them; it holds a
-# name for something only the server can produce.
-#
-# Bounded like _scenario_file_cache and for the same reason (Railway memory): oldest-first
-# eviction on entry count AND total rows held, plus a TTL, because an abandoned prévia must
-# not pin tens of MB until the next restart.
-_th_preview_cache: dict[str, dict[str, Any]] = {}
-_TH_PREVIEW_MAX_ITEMS = int(os.getenv("TH_PREVIEW_MAX_ITEMS", "4"))
-_TH_PREVIEW_MAX_ROWS  = int(os.getenv("TH_PREVIEW_MAX_ROWS", "400000"))
-_TH_PREVIEW_TTL_S     = int(os.getenv("TH_PREVIEW_TTL_S", "3600"))
 
 
 
@@ -1835,8 +1518,8 @@ def cancel_job(job_id: str, _user: dict = Depends(require_auth)):
 #
 # Upload limits. Every route below used to call `await file.read()` (or copyfileobj) with no
 # ceiling of any kind: no Content-Length check, no byte cap, no ASGI body limit. One authenticated
-# @wabtec account — Reader included, since /api/gantt/scenario is deliberately open to Readers —
-# could exhaust the Railway container's memory with a single POST. `_SCENARIO_CACHE_MAX_BYTES`
+# any signed-in account — Reader included, since /api/gantt/scenario is deliberately open to Readers —
+# could exhaust the container's memory with a single POST. `_SCENARIO_CACHE_MAX_BYTES`
 # bounds the scenario CACHE, not the request that fills it, so it never helped here.
 #
 # Two layers, because either one alone leaves a hole:
@@ -1849,83 +1532,14 @@ def cancel_job(job_id: str, _user: dict = Depends(require_auth)):
 #
 # 40 MB against real files: the largest base imported here is a few MB, and the scenario
 # workbook is smaller. Override with UPLOAD_MAX_BYTES if a genuine file ever outgrows it.
-_UPLOAD_MAX_BYTES = int(os.getenv("UPLOAD_MAX_BYTES", str(40 * 1024 * 1024)))
-_UPLOAD_CHUNK     = 1024 * 1024
-_EXCEL_SUFFIXES   = (".xlsx", ".xls")
 
 
-def _require_excel_upload(file: UploadFile) -> str:
-    """Refuse anything that is not named like a workbook; return the original filename.
-
-    The suffix is all that is checked, here as before — the parsers (openpyxl/pandas) are the
-    real content validation and they reject a mislabelled file on their own. The point of this
-    gate is to refuse the obvious case cheaply, BEFORE a byte is read into the process.
-    """
-    name = (file.filename or "").strip()
-    if not name or not name.lower().endswith(_EXCEL_SUFFIXES):
-        raise HTTPException(status_code=400, detail="Apenas arquivos .xlsx ou .xls são aceitos.")
-    return name
 
 
-def _reject_oversize_body(request: Request | None, max_bytes: int) -> None:
-    """Refuse on the declared Content-Length before the body is read. Absent/unparsable header
-    is NOT an error — the read loop still enforces the real limit."""
-    raw = (request.headers.get("content-length") if request is not None else None)
-    try:
-        declared = int(raw) if raw else 0
-    except ValueError:
-        return
-    # The header covers the whole multipart envelope (boundaries + the other form fields), so it
-    # is always a little larger than the file. Comparing it against the same cap is deliberately
-    # slightly strict; the slack is bytes, and the cap is not a precision instrument.
-    if declared > max_bytes:
-        raise HTTPException(
-            status_code=413,
-            detail=f"Arquivo grande demais (máximo {max_bytes // (1024 * 1024)} MB).",
-        )
 
 
-async def _read_upload_bounded(file: UploadFile, max_bytes: int | None = None) -> bytes:
-    """Read an upload into memory, aborting with 413 as soon as the cap is exceeded.
-
-    Chunked rather than `await file.read()`: the whole point is to stop at the limit instead of
-    discovering it after the process has already allocated the file.
-    """
-    cap = max_bytes or _UPLOAD_MAX_BYTES
-    buf = bytearray()
-    while True:
-        chunk = await file.read(_UPLOAD_CHUNK)
-        if not chunk:
-            break
-        buf.extend(chunk)
-        if len(buf) > cap:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Arquivo grande demais (máximo {cap // (1024 * 1024)} MB).",
-            )
-    return bytes(buf)
 
 
-async def _spool_upload_bounded(file: UploadFile, dest, max_bytes: int | None = None) -> int:
-    """Stream an upload to an open file handle under the same cap. Returns the byte count.
-
-    Used where the handler wants the file on disk anyway — the bytes never accumulate in memory,
-    but the ceiling is identical, so a caller cannot pick the unbounded path by accident.
-    """
-    cap = max_bytes or _UPLOAD_MAX_BYTES
-    total = 0
-    while True:
-        chunk = await file.read(_UPLOAD_CHUNK)
-        if not chunk:
-            break
-        total += len(chunk)
-        if total > cap:
-            raise HTTPException(
-                status_code=413,
-                detail=f"Arquivo grande demais (máximo {cap // (1024 * 1024)} MB).",
-            )
-        dest.write(chunk)
-    return total
 
 
 
@@ -1944,24 +1558,10 @@ def excel_items(
     mode:  str        = Query(default="mensal", description="semanal | mensal"),
     _user: dict = Depends(require_auth),
 ):
-    default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
     fws_list   = [f.strip() for f in fws.split(",") if f.strip()] if fws else None
     meses_list = [int(m.strip()) for m in meses.split(",") if m.strip().isdigit()] if meses else None
-    # DB-split-first: prefer the two normalized uploads when populated.
-    df_override = _capacity_source_df()
-    if df_override is None and not default_path.exists():
-        df_override = _db_to_df()
-        if df_override is None:
-            raise HTTPException(
-                status_code=503,
-                detail=f"Excel não encontrado e DB falhou. Causa: {_last_db_error or 'desconhecida'}. Acesse /api/db/debug para mais detalhes.",
-            )
-    result = get_items_for_import(default_path, ano=ano, mes=mes, meses=meses_list, fw=fw, fws=fws_list, mode=mode, df_override=df_override)
-    if result.get("status") == "error" and df_override is None:
-        # File exists but failed to parse (wrong format, missing sheets, etc.) → try DB
-        df_fallback = _db_to_df()
-        if df_fallback is not None:
-            result = get_items_for_import(default_path, ano=ano, mes=mes, meses=meses_list, fw=fw, fws=fws_list, mode=mode, df_override=df_fallback)
+    result = get_items_for_import(_demand_df(), ano=ano, mes=mes, meses=meses_list,
+                                  fw=fw, fws=fws_list, mode=mode)
     if result.get("status") == "error":
         raise HTTPException(status_code=422, detail=result["message"])
     return result
@@ -1974,7 +1574,6 @@ def items_catalog(
     clientes: str | None = Query(default=None, description="Filtrar por clientes (vírgula)"),
     _user: dict = Depends(require_auth),
 ):
-    default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
 
     def _parse(v: str | None) -> list[str] | None:
         if not v:
@@ -1982,25 +1581,12 @@ def items_catalog(
         lst = [x.strip() for x in v.split(",") if x.strip()]
         return lst or None
 
-    # DB-split-first: prefer the two normalized uploads when populated.
-    df_override = _capacity_source_df()
-    if df_override is None and not default_path.exists():
-        df_override = _db_to_df()
-        if df_override is None:
-            raise HTTPException(status_code=503, detail="Arquivo Excel não encontrado e banco de dados indisponível.")
-
     result = get_items_catalog(
-        default_path,
+        _demand_df(),
         areas=_parse(areas),
         familias=_parse(familias),
         clientes=_parse(clientes),
-        df_override=df_override,
     )
-    if result.get("status") == "error" and df_override is None:
-        # File exists but failed → try DB
-        df_fallback = _db_to_df()
-        if df_fallback is not None:
-            result = get_items_catalog(default_path, areas=_parse(areas), familias=_parse(familias), clientes=_parse(clientes), df_override=df_fallback)
     if result.get("status") == "error":
         raise HTTPException(status_code=422, detail=result["message"])
     return result
@@ -2015,31 +1601,18 @@ def assembly_details(
     tipo_filter: str  = Query(default="", description="Tipo FW a filtrar (vazio = todos)"),
     _user: dict = Depends(require_auth),
 ):
-    default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
     item_list = [i.strip() for i in items.split(",") if i.strip()]
     if not item_list:
         raise HTTPException(status_code=400, detail="Lista de itens vazia.")
     fws_list = [f.strip() for f in fws.split(",") if f.strip()] if fws else None
-    # DB-split-first: prefer the two normalized uploads when populated.
-    df_override = _capacity_source_df()
-    if df_override is None and not default_path.exists():
-        df_override = _db_to_df()
-        if df_override is None:
-            raise HTTPException(status_code=503, detail="Arquivo Excel não encontrado e banco de dados indisponível.")
     result = get_assembly_details(
-        default_path,
+        _demand_df(),
         items=item_list,
         mes=mes,
         fws=fws_list,
         mode=mode,
         tipo_filter=tipo_filter.strip(),
-        df_override=df_override,
     )
-    if result.get("status") == "error" and df_override is None:
-        # File exists but failed → try DB
-        df_fallback = _db_to_df()
-        if df_fallback is not None:
-            result = get_assembly_details(default_path, items=item_list, mes=mes, fws=fws_list, mode=mode, tipo_filter=tipo_filter.strip(), df_override=df_fallback)
     if result.get("status") == "error":
         raise HTTPException(status_code=422, detail=result["message"])
     return result
@@ -2119,24 +1692,7 @@ def assembly_details_explicit(
     if not codes:
         raise HTTPException(status_code=400, detail="Lista de itens vazia.")
 
-    default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
-    df_override = _capacity_source_df()
-    if df_override is None and not default_path.exists():
-        df_override = _db_to_df()
-        if df_override is None:
-            raise HTTPException(status_code=503, detail="Arquivo Excel não encontrado e banco de dados indisponível.")
-    result = get_assembly_details(
-        default_path,
-        items=codes,
-        df_override=df_override,
-        demand_override=demand,
-    )
-    if result.get("status") == "error" and df_override is None:
-        df_fallback = _db_to_df()
-        if df_fallback is not None:
-            result = get_assembly_details(
-                default_path, items=codes, df_override=df_fallback, demand_override=demand,
-            )
+    result = get_assembly_details(_demand_df(), items=codes, demand_override=demand)
     if result.get("status") == "error":
         raise HTTPException(status_code=422, detail=result["message"])
     return result
@@ -2149,8 +1705,8 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
     # Backend auth for the WS channel. Browsers cannot set an Authorization header on
     # a WebSocket, so the client passes the Azure ID token as a ?token= query param.
     # Validate it with the SAME central check as every HTTP route (signature, expiry,
-    # issuer, audience, identity, Wabtec domain) BEFORE accepting the socket. Reject
-    # anonymous / invalid / non-Wabtec connections with 1008 (policy violation).
+    # issuer, audience, identity, allowed domain) BEFORE accepting the socket. Reject
+    # anonymous / invalid / unauthenticated connections with 1008 (policy violation).
     try:
         _ws_user = validate_bearer_token(websocket.query_params.get("token", ""))
         # Blocked accounts are denied the WS channel too (HTTP routes go through the
@@ -2242,7 +1798,6 @@ async def websocket_progress(websocket: WebSocket, job_id: str):
 async def _run_optimization_job(job_id: str, payload: OptimizationPayload):
     """
     Executa a otimização em background.
-    Aqui você vai integrar com o CapB335610.py.
     """
     loop = asyncio.get_running_loop()
 
@@ -2265,25 +1820,8 @@ async def _run_optimization_job(job_id: str, payload: OptimizationPayload):
         # Allow frontend to cancel via DELETE /api/optimize/{job_id}
         jobs[job_id]["_stop_event"] = stop_event
 
-        default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
-        df_db: object = None
-        # DB-split-first: prefer the two normalized uploads (Item Rout + Plano Prod)
-        # when populated, so the optimizer runs on the split data, not the bundled
-        # Excel. Falls back to Excel, then to legacy DB, exactly as before.
-        df_db = _capacity_source_df()
-        if df_db is not None:
-            _append_job_log(job_id, f"[SETUP] Dados carregados do banco (split: {len(df_db)} linhas).")
-        elif not default_path.exists():
-            _append_job_log(job_id, "[SETUP] HorasB3.xlsx não encontrado — tentando banco de dados...")
-            df_db = _db_to_df()
-            if df_db is None:
-                raise RuntimeError(
-                    f"Arquivo base não encontrado: {default_path.name}. "
-                    f"Banco de dados também indisponível. Causa: {_last_db_error}"
-                )
-            _append_job_log(job_id, f"[SETUP] Dados carregados do banco de dados ({len(df_db)} linhas).")
-        else:
-            _append_job_log(job_id, f"[SETUP] Excel base localizado: {default_path.name}")
+        df_db = _demand_df()
+        _append_job_log(job_id, f"[SETUP] Dados carregados do banco ({len(df_db)} linhas).")
 
         # Vacations, measured against the PERIOD being optimized rather than today: away all
         # period → off the roster; away part of it → availability scaled down (see _leave_factors).
@@ -2316,7 +1854,7 @@ async def _run_optimization_job(job_id: str, payload: OptimizationPayload):
                                        if payload.expertise_speed else ""))
 
         snapshot = build_snapshot(
-            default_path,
+            df_db,
             items=payload.items,
             top_pct=payload.top_pct,
             ot_day_limit_pct=payload.ot_day_limit_pct,
@@ -2339,7 +1877,6 @@ async def _run_optimization_job(job_id: str, payload: OptimizationPayload):
             wsn_max_turnos=payload.wsn_max_turnos if payload.wsn_max_turnos else None,
             person_availability_pct=_merge_leave_availability(payload.person_availability_pct,
                                                               leave_pct_by_name),
-            df_override=df_db,
             headcount_override=headcount_override,
             expertise_enabled=payload.expertise_enabled,
             expertise_anchor=payload.expertise_anchor,
@@ -2410,9 +1947,8 @@ async def _run_optimization_job(job_id: str, payload: OptimizationPayload):
 @app.get("/api/wsn-people")
 def wsn_people(_user: dict = Depends(require_auth)):
     """
-    Retorna o mapeamento WSN → [pessoas] a partir das abas
-    Discretizado (coluna HEADCOUNT) e HeadCount do HorasB3.xlsx.
-    Quando o Excel não está disponível, usa fallback do banco de dados.
+    Retorna o mapeamento WSN → [pessoas] a partir das tabelas de headcount
+    (Workstation / Person / WorkstationPerson).
     Usado pelo frontend para popular a aba 'Por Pessoa' na janela de otimização.
 
     Authorization: Editor+ role, NO second factor — the same gate /api/headcount applies, for the
@@ -2431,30 +1967,21 @@ def wsn_people(_user: dict = Depends(require_auth)):
     """
     if _current_role(_user) not in ("editor", "admin"):
         raise HTTPException(status_code=403, detail="Permissão de edição necessária.")
-    default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
-    # HEADCOUNT-TAB-FIRST: WSN→people is owned by the centralized Headcount tab
-    # (Workstation/Person/WorkstationPerson), not the routing's HEADCOUNT column — that column is no
-    # longer imported at all. When the DB is reachable the tab is the ONLY source, empty included:
-    # "nobody allocated yet" must read as empty, not silently fall back to stale routing data.
-    # The Excel path below survives only for a DB-less local/dev run.
-    if _DB_AVAILABLE:
-        hc = _headcount_source_dict()
-        result = get_wsn_people_map(default_path, headcount_override=hc)
-        # Expertise rides along with the roster it describes: the results screen shows people
-        # per WSN, and a level shown there has to come from the SAME snapshot as the names, or
-        # the two can disagree on who is even allocated.
-        result["expertise"] = {
-            wsn: dict(info.get("expertise") or {})
-            for wsn, info in hc.items() if info.get("expertise")
-        }
-        result["required_level"] = {
-            wsn: int(info.get("required_level") or 0)
-            for wsn, info in hc.items() if int(info.get("required_level") or 0) > 0
-        }
-    elif default_path.exists():
-        result = get_wsn_people_map(default_path)
-    else:
-        raise HTTPException(status_code=503, detail="Excel não encontrado e banco de dados indisponível.")
+    # The Headcount tables (Workstation/Person/WorkstationPerson) own the WSN -> people map,
+    # empty included: "nobody allocated yet" must read as empty, never as stale routing data.
+    hc = _headcount_source_dict()
+    result = get_wsn_people_map(hc)
+    # Expertise rides along with the roster it describes: the results screen shows people
+    # per WSN, and a level shown there has to come from the SAME snapshot as the names, or
+    # the two can disagree on who is even allocated.
+    result["expertise"] = {
+        wsn: dict(info.get("expertise") or {})
+        for wsn, info in hc.items() if info.get("expertise")
+    }
+    result["required_level"] = {
+        wsn: int(info.get("required_level") or 0)
+        for wsn, info in hc.items() if int(info.get("required_level") or 0) > 0
+    }
     if result.get("status") == "error":
         raise HTTPException(status_code=422, detail=result["message"])
     return result
@@ -2465,22 +1992,15 @@ def period_days(fws: str = "", _user: dict = Depends(require_auth)):
     """
     Retorna o total de dias mapeados para os FWs informados.
     Parâmetro: fws=17,18,19 (números de fiscal week separados por vírgula).
-    Quando o Excel não está disponível, usa fallback do banco de dados.
     Usado pelo frontend para exibir 'Dias mapeados' no header dos resultados.
     """
     fw_list = [f.strip() for f in fws.split(",") if f.strip()]
-    default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
-    # DB-split-first: FW→year mapping comes from the plan (Plano Prod) FW + ANO.
     df_db = _capacity_source_df()
-    if df_db is not None:
-        result = get_period_days(default_path, fw_list, df_override=df_db)
-    elif default_path.exists():
-        result = get_period_days(default_path, fw_list)
-    else:
+    if df_db is None:
         df_db = _db_to_df()
-        if df_db is None or df_db.empty:
-            return {"status": "ok", "total_days": 0, "days_by_fw": {}}
-        result = get_period_days(default_path, fw_list, df_override=df_db)
+    if df_db is None or df_db.empty:
+        return {"status": "ok", "total_days": 0, "days_by_fw": {}}
+    result = get_period_days(df_db, fw_list)
     if result.get("status") == "error":
         raise HTTPException(status_code=422, detail=result["message"])
     return result
@@ -2491,21 +2011,11 @@ def period_days(fws: str = "", _user: dict = Depends(require_auth)):
 @app.get("/api/capacity-stats")
 def capacity_stats(_user: dict = Depends(require_auth)):
     """
-    Retorna DISPONIVEL_H e ALOCADO_H calculados a partir das abas
-    HeadCount e Testes do HorasB3.xlsx.
-    Quando o Excel não está disponível, retorna zeros (dados não armazenados no banco).
+    Retorna DISPONIVEL_H e ALOCADO_H calculados a partir das tabelas de headcount.
+    Sem headcount cadastrado, retorna zeros.
     Usado pelo footer do frontend para exibir os KPIs de capacidade.
     """
-    default_path = Path(__file__).resolve().parent / "HorasB3.xlsx"
-    # Sourced from the Headcount tab whenever the DB is reachable. Previously this read only the
-    # Excel HeadCount/Testes sheets and returned hardcoded zeros when HorasB3.xlsx was missing —
-    # which is the production state — so these KPIs were permanently 0 and never saw the tab.
-    if _DB_AVAILABLE:
-        result = compute_capacity_stats(default_path, headcount_override=_headcount_source_dict())
-    elif not default_path.exists():
-        return {"status": "ok", "disponivel_h": 0.0, "alocado_h": 0.0}
-    else:
-        result = compute_capacity_stats(default_path)
+    result = compute_capacity_stats(_headcount_source_dict())
     if result.get("status") == "error":
         raise HTTPException(status_code=422, detail=result["message"])
     return result
@@ -2514,7 +2024,7 @@ def capacity_stats(_user: dict = Depends(require_auth)):
 # ── Database endpoints ───────────────────────────────────────────
 
 # ── Error-log deduplication ──────────────────────────────────────────────────
-# Railway bills log ingestion, and a single sustained fault (a Supabase blip, an
+# Log volume is not free, and a single sustained fault (a database blip, an
 # unreachable pooler) makes EVERY request emit a full traceback for as long as it
 # lasts — the same stack, hundreds of times. That is pure cost with zero added
 # diagnostic value: the first copy already tells you everything.
@@ -2574,7 +2084,7 @@ def db_status(_user: dict = Depends(require_auth)):
     already polled by every open tab through useBackendHealth, so riding on it lets a client
     discover the deliberate-shutdown switch WITHOUT any additional periodic request. A dedicated
     poll for the flag would be self-defeating — the traffic it generates is exactly what has to
-    stop for Railway's idle timer to run out. The client reacts by muting its own pollers.
+    stop for the host's idle timer to run out. The client reacts by muting its own pollers.
     """
     import os as _os
     db_url_set = bool(_os.getenv("DATABASE_URL"))
@@ -2609,169 +2119,6 @@ def db_status(_user: dict = Depends(require_auth)):
 
 
 
-def _make_import_endpoint(table_key: str):
-    """
-    Factory that creates a background import endpoint for a given table.
-    table_key: 'schedule' | 'locos_rout'
-    """
-    async def _endpoint(
-        request: Request,
-        file: UploadFile = File(...),
-        password: str = Form(default=""),
-        mode: str = Form(default="replace"),
-        _user: dict = Depends(require_auth),
-    ):
-        if not _DB_AVAILABLE:
-            raise HTTPException(status_code=503, detail="Banco de dados não configurado.")
-
-        # Allowlist the mode — anything else is a client bug, never a silent replace.
-        if mode not in IMPORT_MODES:
-            raise HTTPException(status_code=400, detail="Modo de importação inválido.")
-
-        # Authorization (Editor+) + second factor (import password, fails closed in prod).
-        if _current_role(_user) not in ("editor", "admin"):
-            raise HTTPException(status_code=403, detail="Permissão de edição necessária.")
-        _check_app_password(password, _user, context=f"Importação de base ({table_key})")
-
-        original_filename = _require_excel_upload(file)
-        _reject_oversize_body(request, _UPLOAD_MAX_BYTES)
-
-        contents = await _read_upload_bounded(file)
-        actor = _username_of((_user or {}).get("email", ""))
-        job_id = str(uuid.uuid4())
-        _import_jobs[job_id] = {"status": "running", "logs": [], "result": None, "error": None, "cancel": False, "table_key": table_key}
-
-        # Single-import guard (see /api/db/import) — blocks the duplicate-records
-        # race when a cancelled-but-not-stopped import overlaps a restart.
-        blocking = _try_acquire_import_slot(table_key, job_id)
-        if blocking is not None:
-            del _import_jobs[job_id]
-            raise HTTPException(
-                status_code=409,
-                detail=f"Já existe uma importação de '{table_key}' em andamento. Aguarde-a finalizar ou cancelar antes de iniciar outra.",
-            )
-
-        fn_map = {
-            "schedule":   import_schedule_to_db,
-            "locos_rout": import_locos_rout_to_db,
-            "itens_rout": import_itens_rout_to_db,
-            "plano_prod": import_plano_prod_to_db,
-            "headcount":  import_headcount_to_db,
-        }
-        import_fn = fn_map[table_key]
-
-        def _do():
-            def on_progress(msg: str):
-                _import_jobs[job_id]["logs"].append(msg)
-                if _import_jobs[job_id].get("cancel"):
-                    raise InterruptedError("Importação cancelada pelo usuário.")
-            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
-                tmp.write(contents)
-                tmp_path = tmp.name
-            try:
-                with get_db() as db:
-                    result = import_fn(tmp_path, db, progress_callback=on_progress, mode=mode)
-                if result.get("status") == "error":
-                    _import_jobs[job_id]["status"] = "error"
-                    _import_jobs[job_id]["error"]  = result.get("message", "Erro desconhecido")
-                else:
-                    _import_jobs[job_id]["status"] = "done"
-                    _import_jobs[job_id]["result"] = result
-                    # Invalidate Gantt cache so next open re-fetches fresh data
-                    _invalidate_gantt_cache()
-                    # Same for the capacity frame: an import swapped the active ver,
-                    # so a cached split frame is now the PREVIOUS upload. Dropped
-                    # unconditionally — cheap, and cheaper than reasoning about which
-                    # of the five importers feeds the split.
-                    _invalidate_capacity_cache()
-                    # ONE admin-facing alert per completed upload (audit + bell).
-                    _tbl_label = (_DB_DATASETS.get(table_key) or {}).get("label") or table_key
-                    _mode_txt = "acrescentada" if mode == "append" else "substituída"
-                    _record_security_event(
-                        actor=actor, target=table_key, event_type="data_import",
-                        detail=f"Arquivo '{original_filename}' importado por {actor} — base '{_tbl_label}' {_mode_txt}.",
-                        throttle_key=None,
-                    )
-            except InterruptedError:
-                _import_jobs[job_id]["status"] = "cancelled"
-                _import_jobs[job_id]["error"]  = "Importação cancelada pelo usuário."
-            except Exception:
-                logger.exception("[db_import] import job %s failed", job_id)
-                _import_jobs[job_id]["status"] = "error"
-                _import_jobs[job_id]["error"]  = "Erro interno durante a importação. Consulte os logs do servidor."
-            finally:
-                Path(tmp_path).unlink(missing_ok=True)
-                _release_import_slot(table_key, job_id)
-
-        # Dedicated OS thread — see the note on /api/db/import for why we avoid
-        # the shared default executor here.
-        threading.Thread(target=_do, daemon=True, name=f"import-{job_id[:8]}").start()
-        return {"job_id": job_id, "status": "started"}
-
-    return _endpoint
-
-
-app.add_api_route(
-    "/api/db/import/schedule",
-    _make_import_endpoint("schedule"),
-    methods=["POST"],
-    summary="Importa aba 'Schedule - MS' para a tabela 'schedule'",
-)
-app.add_api_route(
-    "/api/db/import/locos-rout",
-    _make_import_endpoint("locos_rout"),
-    methods=["POST"],
-    summary="Importa aba 'Locos Rout' para a tabela 'locos_rout'",
-)
-app.add_api_route(
-    "/api/db/import/headcount",
-    _make_import_endpoint("headcount"),
-    methods=["POST"],
-    summary="Importa aba 'HeadCount' para as tabelas workstation/person/workstation_person",
-)
-app.add_api_route(
-    "/api/db/import/itens-rout",
-    _make_import_endpoint("itens_rout"),
-    methods=["POST"],
-    summary="Importa o arquivo 'Itens Rout' para a tabela 'itens_rout'",
-)
-app.add_api_route(
-    "/api/db/import/plano-prod",
-    _make_import_endpoint("plano_prod"),
-    methods=["POST"],
-    summary="Importa o arquivo 'Plano Prod' para a tabela 'plano_prod'",
-)
-
-
-
-
-
-
-def _download_split_table(model, table: str, sheet_name: str, filename: str):
-    """Shared helper: dump a split table's active-ver rows to xlsx for download."""
-    if not _DB_AVAILABLE:
-        raise HTTPException(status_code=503, detail="Banco de dados não configurado.")
-    try:
-        with get_db() as db:
-            rows = db.query(model).filter(model.ver == get_active_ver(db, table)).all()
-            import json as _json
-            records = [_json.loads(r.row_json) for r in rows]   # read row_json before the session closes
-        if not records:
-            raise HTTPException(status_code=404, detail=f"Tabela '{table}' está vazia.")
-        df = pd.DataFrame(records)
-        import tempfile as _tmp
-        tmp = _tmp.NamedTemporaryFile(suffix=".xlsx", delete=False)
-        tmp.close()
-        df.to_excel(tmp.name, index=False, sheet_name=sheet_name)
-        return FileResponse(
-            path=tmp.name,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            filename=filename,
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=_log_and_generic(exc, "db_download"))
 
 
 
@@ -2782,132 +2129,6 @@ def _download_split_table(model, table: str, sheet_name: str, filename: str):
 
 
 
-def _db_dataset_or_400(key: str) -> dict:
-    spec = _DB_DATASETS.get(key)
-    if spec is None:
-        raise HTTPException(status_code=400, detail="Base de dados desconhecida.")
-    return spec
-
-
-def _norm_header(txt) -> str:
-    """Accent-insensitive header key — mirrors import_excel_to_db._normalize."""
-    import unicodedata
-    s = unicodedata.normalize("NFD", str(txt if txt is not None else ""))
-    s = "".join(c for c in s if unicodedata.category(c) != "Mn")
-    return s.strip().lower()
-
-
-def _resolve_view_columns(key: str, present: list[str]) -> list[str]:
-    """Map a dataset's `view_columns` allowlist onto the row_json keys actually present,
-    in allowlist order. Each name resolves through its `view_aliases` override first, then
-    its `shortcuts` aliases (so the stored spelling wins — "DESCRICAO" matches the
-    "DESCRIÇÃO" entry), then by its own normalized name. Listed-but-absent columns are
-    skipped; unlisted keys are never exposed. Falls back to every present key when a
-    dataset declares no allowlist.
-
-    The `view_aliases` layer is what keeps two entries off the same column: a name listed
-    there resolves ONLY through the spellings it names, so "DESCRIÇÃO" (whose shortcut
-    aliases include "DESC") can no longer claim the separate "DESC" column and leave the
-    operation description invisible.
-    """
-    spec = _DB_DATASETS[key]
-    allow = spec.get("view_columns")
-    if not allow:
-        return list(present)
-    aliases_of = {_norm_header(a[0]): a for _c, a, _t in spec["shortcuts"]}
-    # Explicit overrides win over the shortcut-derived aliases.
-    for _name, _al in (spec.get("view_aliases") or {}).items():
-        aliases_of[_norm_header(_name)] = list(_al)
-    by_norm: dict[str, str] = {}
-    for k in present:                       # first key wins on a normalized collision
-        by_norm.setdefault(_norm_header(k), k)
-    out: list[str] = []
-    seen: set[str] = set()
-    for name in allow:
-        # The entry's own name is always the last candidate, so an alias list that misses
-        # the stored spelling still resolves when the header matches the display name.
-        cands = list(aliases_of.get(_norm_header(name), []))
-        if name not in cands:
-            cands.append(name)
-        for cand in cands:
-            hit = by_norm.get(_norm_header(cand))
-            if hit is not None and hit not in seen:
-                seen.add(hit)
-                out.append(hit)
-                break
-    return out
-
-
-def _row_filter_cols(key: str, present: list[str]) -> list[str]:
-    """Resolve a dataset's `row_filter` names onto the stored keys, or [] when it has none."""
-    names = (_DB_DATASETS[key].get("row_filter") or [])
-    if not names:
-        return []
-    by_norm: dict[str, str] = {}
-    for k in present:
-        by_norm.setdefault(_norm_header(k), k)
-    aliases_of = {_norm_header(n): list(a) for n, a in (_DB_DATASETS[key].get("view_aliases") or {}).items()}
-    out: list[str] = []
-    for name in names:
-        for cand in aliases_of.get(_norm_header(name), []) + [name]:
-            hit = by_norm.get(_norm_header(cand))
-            if hit is not None:
-                out.append(hit)
-                break
-    return out
-
-
-def _keep_row(row: dict, filter_cols: list[str]) -> bool:
-    """A row survives a `row_filter` when at least one of its columns is non-blank. No
-    filter declared ⇒ every row survives."""
-    if not filter_cols:
-        return True
-    for c in filter_cols:
-        v = row.get(c)
-        if v is None:
-            continue
-        if isinstance(v, str):
-            if v.strip():
-                return True
-        else:
-            return True
-    return False
-
-
-def _recompute_shortcuts(key: str, row_dict: dict) -> dict:
-    """Recompute a row's indexed shortcut columns from its (edited) row_json dict,
-    reusing the importers' coercion helpers so values match a fresh import exactly."""
-    from import_excel_to_db import _str_val, _safe_float, _safe_int, _str_id_val, _fw_key
-    import re as _re
-
-    def _coerce(tag, v):
-        if tag == "float": return _safe_float(v)
-        if tag == "int":   return _safe_int(v)
-        if tag == "id":    return _str_id_val(v)
-        if tag == "fw":    return None if v is None else _fw_key(v)
-        if tag == "date":
-            s = _str_val(v)
-            return s[:10] if (s and _re.match(r"\d{4}-\d{2}-\d{2}", s)) else s
-        return _str_val(v)
-
-    norm = {_norm_header(k): k for k in row_dict}
-    out: dict = {}
-    for col, cands, tag in _DB_DATASETS[key]["shortcuts"]:
-        hit = next((norm[_norm_header(c)] for c in cands if _norm_header(c) in norm), None)
-        out[col] = _coerce(tag, row_dict.get(hit)) if hit is not None else None
-    return out
-
-
-def _validate_required(key: str, values: dict) -> list[str]:
-    """Return the list of required headers missing/blank in an insert payload."""
-    from import_excel_to_db import _str_val
-    norm = {_norm_header(k): v for k, v in values.items()}
-    missing = []
-    for name in _DB_DATASETS[key]["required"]:
-        v = norm.get(_norm_header(name))
-        if _str_val(v) is None:
-            missing.append(name)
-    return missing
 
 
 
@@ -2916,18 +2137,32 @@ def _validate_required(key: str, values: dict) -> list[str]:
 
 
 
-def _store_scenario_file(scenario_id: str, file_bytes: bytes) -> None:
-    """Insert a scenario blob, evicting oldest entries until within the byte/item budget."""
-    _scenario_file_cache[scenario_id] = file_bytes
-    total = sum(len(b) for b in _scenario_file_cache.values())
-    while _scenario_file_cache and (
-        total > _SCENARIO_CACHE_MAX_BYTES or len(_scenario_file_cache) > _SCENARIO_CACHE_MAX_ITEMS
-    ):
-        oldest, blob = next(iter(_scenario_file_cache.items()))
-        if oldest == scenario_id:      # never evict the entry we just stored
-            break
-        _scenario_file_cache.pop(oldest, None)
-        total -= len(blob)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# ── Gantt endpoints ──────────────────────────────────────────────────────────
+
+# Simple in-process cache: (payload_dict, built_at_timestamp)
+_gantt_cache: dict | None = None
+_gantt_cache_at: float = 0.0
+_GANTT_CACHE_TTL = 300  # seconds — revalidate after 5 minutes
 
 
 def _invalidate_gantt_cache() -> None:
@@ -2980,18 +2215,13 @@ def _load_calendar_overrides() -> int:
     return len(mapping)
 
 
-def _reload_calendar_and_invalidate() -> None:
-    """Re-apply the override snapshot and drop the Gantt cache so the next
-    /api/gantt/data (and every working-day KPI) recomputes from the new calendar."""
-    _load_calendar_overrides()
-    _invalidate_gantt_cache()
 
 
 @app.get("/api/gantt/data")
 def gantt_data(_user: dict = Depends(require_auth)):
     """
     Retorna os dados do Gantt como JSON para renderização no frontend.
-    Lê do banco (preferencial) ou do Excel HorasB3.xlsx (fallback).
+    Lê do banco — a única fonte.
     Resultado é cacheado em memória por 5 minutos para respostas rápidas.
     """
     import time as _time
@@ -3009,25 +2239,7 @@ def gantt_data(_user: dict = Depends(require_auth)):
         raise HTTPException(status_code=503, detail=str(exc))
     except Exception as exc:
         raise HTTPException(status_code=500, detail=_log_and_generic(exc, "endpoint"))
-
-
-# ── User permissions (Reader / Editor / Admin access control) ──────────────────────────
-# Roles form a ladder: Reader < Editor < Admin. Only Editors and Admins are stored in the
-# user_permissions table — anyone not listed is implicitly a Reader (view-only). Identity is
-# the e-mail local-part (before '@'), lower-cased, so it is domain-independent.
-_INITIAL_ADMIN = "joao.voss"          # seeded at startup when no admin exists yet
-_VALID_ROLES  = {"editor", "admin"}   # roles an admin may ASSIGN via user management
 _STORED_ROLES = {"reader", "editor", "admin"}  # roles that may exist on a persisted row
-
-# ── Break-glass superadmins ───────────────────────────────────────────────────
-# Always resolve to Admin and can NEVER be blocked or demoted — the recovery path if
-# every other admin is locked out or blocked. Comma-separated e-mail local-parts in
-# SUPERADMIN_USERNAMES; defaults to the app owner so a recovery account always exists.
-_SUPERADMINS: set[str] = {
-    u.strip().lower()
-    for u in os.getenv("SUPERADMIN_USERNAMES", "joao.voss").split(",")
-    if u.strip()
-}
 
 
 def _username_of(email_or_name: str) -> str:
@@ -3035,15 +2247,6 @@ def _username_of(email_or_name: str) -> str:
     Accepts a bare username too (returns it normalized)."""
     s = str(email_or_name or "").strip().lower()
     return s.split("@", 1)[0] if "@" in s else s
-
-
-def _is_superadmin(user_or_name) -> bool:
-    """True for a break-glass superadmin (by user dict or bare username)."""
-    if isinstance(user_or_name, dict):
-        name = _username_of(user_or_name.get("email", ""))
-    else:
-        name = _username_of(str(user_or_name or ""))
-    return bool(name) and name in _SUPERADMINS
 
 
 def _aware(dt):
@@ -3087,8 +2290,8 @@ def _refresh_blocked_cache(force: bool = False) -> None:
 
 
 def _is_user_blocked(username: str) -> bool:
-    """True if the username is currently blocked. Superadmins are never blocked."""
-    if not username or username in _SUPERADMINS:
+    """True if the username is currently blocked."""
+    if not username:
         return False
     _refresh_blocked_cache()
     with _blocked_lock:
@@ -3114,7 +2317,6 @@ def _is_user_blocked(username: str) -> bool:
 # lets a container idle out. It denies access, and that is all it does.
 _SETTING_OFFLINE      = "server_offline"
 _SETTING_OFFLINE_MSG  = "server_offline_message"
-_SETTING_OFFLINE_IMG  = "server_offline_image"
 #: Historic key name, kept so the existing app_setting row keeps working. Its MEANING changed
 #: with the Entra ID removal: "block new users" is no longer a switch, it is the permanent rule
 #: (nobody is auto-registered any more — see _touch_user_login). What the flag controls now is
@@ -3122,10 +2324,7 @@ _SETTING_OFFLINE_IMG  = "server_offline_image"
 #: /api/auth/request-access is refused outright, so the sign-up form stops taking submissions;
 #: off (the default) ⇒ requests are accepted and queue for an admin decision. Renaming the key
 #: would silently reset every deployment that already has it set, which is why it stays.
-_SETTING_NEW_LOCKDOWN = "lockdown_new_users"
 
-_OFFLINE_MSG_MAX = 500          # admin-authored, rendered as TEXT (never HTML) in the client
-_OFFLINE_IMG_MAX = 500          # a URL, validated below; the browser fetches it, this server never does
 _DEFAULT_OFFLINE_MSG = (
     "O servidor está temporariamente indisponível por decisão da administração. "
     "Tente novamente mais tarde."
@@ -3173,55 +2372,14 @@ def _is_server_offline() -> bool:
     return _setting(_SETTING_OFFLINE) == "1"
 
 
-def _is_new_user_lockdown() -> bool:
-    """True while self-service access requests are CLOSED (see _SETTING_NEW_LOCKDOWN)."""
-    return _setting(_SETTING_NEW_LOCKDOWN) == "1"
 
 
 def _offline_message() -> str:
     return (_setting(_SETTING_OFFLINE_MSG) or "").strip() or _DEFAULT_OFFLINE_MSG
 
 
-def _offline_image() -> str:
-    """The optional picture/GIF shown under the offline message. No default: blank means no image."""
-    return (_setting(_SETTING_OFFLINE_IMG) or "").strip()
 
 
-def _clean_offline_image_url(raw: object) -> str:
-    """Validate an admin-supplied image URL, or raise 400. Empty input clears the image.
-
-    HTTPS ONLY, and nothing else. The value is written verbatim into an <img src> on every user's
-    screen, so the scheme allow-list is the control that matters: `javascript:` and `data:` are the
-    two ways a URL-shaped string turns into script or into arbitrary inline content, and neither is
-    ever a picture link somebody pastes. `http:` is refused as well — the app is served over HTTPS
-    and the browser would block the mixed content anyway, so accepting it would only store a URL
-    that silently never renders. Embedded credentials (`user:pass@host`) are refused for the same
-    reason they are refused anywhere: they are not part of a picture link and they leak.
-
-    NOT an SSRF surface: this server never fetches the URL. The browser does, which is also why the
-    client sends it with `referrerpolicy="no-referrer"` — the third-party host still sees each
-    viewer's IP, which is inherent to "render it from the link" and is the admin's call to make.
-    """
-    from urllib.parse import urlparse
-
-    s = str(raw or "").strip()[:_OFFLINE_IMG_MAX]
-    if not s:
-        return ""
-    # A URL with whitespace or control characters in it is malformed; refuse rather than normalize.
-    if any(ch.isspace() or ord(ch) < 32 for ch in s):
-        raise HTTPException(status_code=400, detail="Link da imagem inválido.")
-    try:
-        u = urlparse(s)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Link da imagem inválido.")
-    if u.scheme.lower() != "https" or not u.netloc:
-        raise HTTPException(
-            status_code=400,
-            detail="O link da imagem deve começar com https:// e apontar direto para o arquivo.",
-        )
-    if "@" in u.netloc:
-        raise HTTPException(status_code=400, detail="Link da imagem inválido.")
-    return s
 
 
 def _is_unregistered_locked(username: str) -> bool:
@@ -3235,11 +2393,10 @@ def _is_unregistered_locked(username: str) -> bool:
     DELETED while its session was still alive. Denying it is the point — otherwise
     "Excluir usuário" would only take effect at the next expiry, up to 12 h later.
 
-    Superadmins are exempt (break-glass). A DB failure returns False rather than locking
-    everyone out of the app on a transient blip — the same fail-open choice as before, and
-    the reason this can never be the ONLY control: the token signature is what actually
-    proves identity."""
-    if not username or username in _SUPERADMINS:
+    A DB failure returns False rather than locking everyone out of the app on a transient
+    blip — the same fail-open choice as before, and the reason this can never be the ONLY
+    control: the token signature is what actually proves identity."""
+    if not username:
         return False
     if not _DB_AVAILABLE:
         return False
@@ -3401,9 +2558,6 @@ def _recall_role(username: str) -> str | None:
             return None
         return role
 
-def _forget_role(username: str) -> None:
-    with _role_cache_lock:
-        _role_cache.pop(username, None)
 
 
 def _touch_user_login(username: str) -> None:
@@ -3426,11 +2580,8 @@ def _touch_user_login(username: str) -> None:
         with get_db() as db:
             row = db.query(UserPermission).filter(UserPermission.username == username).first()
             if row is None:
-                if username not in _SUPERADMINS:
-                    return
-                db.add(UserPermission(username=username, role="admin", created_at=now, last_login=now))
-                _log_security_event(db, actor="system", target=username, event_type="user_registered",
-                                    detail=f"Superadministrador recriado no cadastro: {username}.")
+                # Nothing to recreate: the demo ships exactly one account and never adds another.
+                return
             else:
                 last = _aware(row.last_login)
                 if last is None or (now - last).total_seconds() > 600:
@@ -3462,7 +2613,7 @@ def _touch_user_activity(username: str) -> None:
     this file exists to prevent. The console already tails this stream, so the data reaches it
     with no new HTTP surface at all.
 
-    What goes on the line is the bare `username` (`joao.voss`), never the e-mail, the token or the
+    What goes on the line is the bare `username` (`demo`), never the e-mail, the token or the
     role's password state. The throttle above doubles as the sample rate: one line per user per
     minute, which is also the resolution the console's presence trace draws at.
     """
@@ -3564,65 +2715,8 @@ def _persist_lockout_event(user: dict) -> None:
         logger.warning("[audit] persist lockout(%s) failed: %s", uname, exc)
 
 
-def _warning_for(row, now: datetime | None = None) -> dict | None:
-    """Build the security-warning descriptor for a user row (None if never locked out).
-    The lockout COUNT is permanent history; severity/recency/active drive the UI badge."""
-    cnt = int(row.lockout_count or 0)
-    if cnt <= 0:
-        return None
-    now = now or datetime.now(timezone.utc)
-    last = _aware(row.last_lockout_at)
-    ack  = _aware(row.warning_ack_at)
-    # "active" = a lockout happened that an admin hasn't acknowledged yet.
-    active = last is not None and (ack is None or ack < last)
-    recent = last is not None and (now - last) < timedelta(days=7)
-    severity = "high" if cnt >= 10 else "warning" if cnt >= 3 else "info"
-    return {
-        "count": cnt,
-        "severity": severity,
-        "active": bool(active),
-        "recent": bool(recent),
-        "last_lockout_at": last.isoformat() if last else None,
-    }
 
 
-def _check_app_password(password: str, user: dict | None = None, context: str = "") -> None:
-    """Validate the shared application password (IMPORT_PASSWORD). Raises 403 on mismatch.
-
-    FAILS CLOSED in production: if IMPORT_PASSWORD is not configured, the destructive
-    operations that use this gate are refused (503) instead of silently proceeding
-    unprotected. In development an unset password stays a no-op for convenience.
-
-    When `user` is provided, wrong passwords feed the SAME per-user failed-attempt
-    lockout as the admin unlock (5 in a row → 15-min lockout), plus a per-minute rate
-    limit — so admin+import guesses share one budget and one lockout.
-
-    `context` labels WHAT the password was gating (e.g. "Importação de base (Excel)")
-    in the SecurityEvent recorded for admins — both on success and on failure."""
-    u = user or {}
-    uname = _username_of(u.get("email", ""))
-    _check_pw_lockout(u)
-    _rate_limit(u, "import")
-    required_pw = os.getenv("IMPORT_PASSWORD", "").strip()
-    if not required_pw:
-        if ENVIRONMENT == "production":
-            raise HTTPException(
-                status_code=503,
-                detail="Operação bloqueada: IMPORT_PASSWORD não configurado no servidor.",
-            )
-        return
-    ctx = f" — {context}" if context else ""
-    if not _hmac.compare_digest(str(password or "").strip(), required_pw):
-        tripped = _record_pw_failure(u)
-        _record_security_event(
-            actor=uname, event_type="import_pw_fail",
-            detail=f"Senha de importação/exportação incorreta{ctx}.",
-            throttle_key=(uname, "import_pw_fail", context), throttle_s=60,
-        )
-        if tripped:
-            raise HTTPException(status_code=429, detail=_LOCKOUT_DETAIL, headers={"X-Locked-Out": "1"})
-        raise HTTPException(status_code=403, detail="Senha incorreta.")
-    _reset_pw_failures(u)
     # No 'import_pw_used' row — same reasoning as the admin unlock above: the operation this gate
     # protects (data_import / data_download / schedule_save / …) is what gets audited. The failure
     # path stays.
@@ -3642,9 +2736,6 @@ def _current_role(user: dict) -> str:
     # role-gated endpoint (and the UI, via /permissions/me) treats the user as a Reader.
     # The real role is restored automatically once the lockout expires — _is_locked_out()
     # clears it on read — with no persisted change to the user's stored role.
-    # Break-glass superadmins are ALWAYS Admin (never revoked by lockout, never DB-dependent).
-    if _is_superadmin(user):
-        return "admin"
     if _is_locked_out(user):
         return "reader"
     uname = _username_of((user or {}).get("email", ""))
@@ -3696,141 +2787,11 @@ def my_permission(user: dict = Depends(_base_require_auth)):
         "locked": _is_locked_out(user),
         "blocked": banned or unregistered,
         "blockedReason": "banned" if banned else ("unregistered" if unregistered else None),
-        # Local-auth additions. `mustChangePassword` is advisory only — the app nags, it does
-        # not lock anyone out of their own account over a password it generated for them.
         "email": _account_email(uname),
-        "mustChangePassword": _must_change_password(uname),
     }
 
 
 # ── Server control endpoints ──────────────────────────────────────────────────────────────
-
-
-
-
-
-
-def _iso(dt) -> str | None:
-    a = _aware(dt)
-    return a.isoformat() if a else None
-
-
-def _user_row_dict(row, now: datetime) -> dict:
-    """Serialize a UserPermission row for the admin roster view."""
-    return {
-        "username": row.username,
-        "role": row.role,
-        "is_blocked": bool(row.is_blocked),
-        "is_superadmin": row.username in _SUPERADMINS,
-        "created_at": _iso(row.created_at),
-        "last_login": _iso(row.last_login),
-        "lockout_count": int(row.lockout_count or 0),
-        "last_lockout_at": _iso(row.last_lockout_at),
-        "warning": _warning_for(row, now),
-        "last_role_change_at": _iso(row.last_role_change_at),
-        "last_role_change_by": row.last_role_change_by,
-        # Local-credential state. The HASH is never serialized — only whether one exists, so the
-        # roster can show "conta sem senha definida" (an account nobody can sign in to yet).
-        "email": row.email or "",
-        "has_password": bool(row.password_hash),
-        "must_change_password": bool(row.must_change_password),
-        "password_set_at": _iso(row.password_set_at),
-    }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-def _write_initial_passwords(lines: list[str]) -> str:
-    """Grava as senhas recém-geradas e devolve o caminho (ou '' se não foi possível gravar).
-
-    Acrescenta ao arquivo em vez de sobrescrever: um segundo boot que gere senha para UMA
-    conta nova não pode apagar a lista das outras, que o admin ainda pode não ter distribuído.
-    """
-    try:
-        _ACCOUNTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        with open(_ACCOUNTS_FILE, "a", encoding="utf-8") as fh:
-            fh.write(f"\n# Senhas geradas em {stamp} (migracao Entra ID -> login local)\n")
-            fh.write("# Entregue cada senha ao seu dono e apague este arquivo depois.\n")
-            for line in lines:
-                fh.write(line + "\n")
-        try:
-            os.chmod(_ACCOUNTS_FILE, 0o600)   # sem efeito prático no Windows; correto no Linux
-        except Exception:
-            pass
-        return str(_ACCOUNTS_FILE)
-    except Exception as exc:
-        logger.error("[auth] Não foi possível gravar %s: %s", _ACCOUNTS_FILE, exc)
-        return ""
-
-
-def _bootstrap_local_credentials() -> None:
-    """Gera senha para toda conta existente que ainda não tem uma. Roda no boot, é idempotente.
-
-    Só toca em linhas com `password_hash` NULL, então: roda de verdade uma vez, no primeiro
-    boot depois da migração, e depois disso vira uma consulta que não encontra nada. Papel,
-    bloqueio, histórico e data de criação de cada conta ficam exatamente como estavam — a
-    única escrita é a credencial que a conta não tinha porque quem a guardava era a Entra ID.
-
-    SUPERADMIN_BOOTSTRAP_PASSWORD, se definida, é usada para as contas break-glass em vez de
-    uma senha aleatória. É o caminho de recuperação para quando o operador não consegue ler o
-    arquivo gerado (container efêmero, disco remoto): sem ele, um deploy em que o arquivo se
-    perde deixa a aplicação sem NINGUÉM que consiga entrar.
-    """
-    if not _DB_AVAILABLE:
-        return
-    fixed_super = os.getenv("SUPERADMIN_BOOTSTRAP_PASSWORD", "").strip()
-    generated: list[tuple[str, str, str]] = []   # (username, role, senha)
-    try:
-        now = datetime.now(timezone.utc)
-        with get_db() as db:
-            rows = (db.query(UserPermission)
-                      .filter(or_(UserPermission.password_hash.is_(None),
-                                  UserPermission.password_hash == "")).all())
-            for row in rows:
-                pw = fixed_super if (fixed_super and row.username in _SUPERADMINS) else generate_password(12)
-                row.password_hash = hash_password(pw)
-                row.password_set_at = now
-                row.must_change_password = True
-                if not row.email:
-                    # O cadastro só guardava a parte antes do '@' (a chave de busca de tudo:
-                    # papel, auditoria, presença). Reconstruímos o endereço com o domínio
-                    # corporativo, que é exatamente o que a Entra ID entregava.
-                    row.email = f"{row.username}@{ALLOWED_DOMAIN}" if ALLOWED_DOMAIN else row.username
-                generated.append((row.username, row.role or "reader", pw))
-    except Exception as exc:
-        logger.error("[auth] Bootstrap de credenciais falhou: %s", exc)
-        return
-
-    if not generated:
-        return
-
-    path = _write_initial_passwords([f"{u}\t{r}\t{p}" for (u, r, p) in generated])
-    logger.warning(
-        "[auth] %d conta(s) migrada(s) para login local. Senhas geradas em: %s",
-        len(generated), path or "<falha ao gravar>",
-    )
-    if not path:
-        # Último recurso: sem o arquivo, a única cópia da senha é esta linha. É um risco
-        # conhecido (fica no log) e ainda assim melhor do que uma aplicação em que ninguém
-        # consegue entrar depois de a autenticação anterior ter morrido.
-        for (u, r, p) in generated:
-            print(f"[auth][senha-inicial] {u} ({r}): {p}", flush=True)
-    _record_security_event(
-        actor="system", target="server", event_type="auth_migration",
-        detail=(f"{len(generated)} conta(s) receberam senha local na migração do Entra ID "
-                f"para autenticação própria."),
-    )
 
 
 def _account_email(username: str) -> str:
@@ -3845,19 +2806,6 @@ def _account_email(username: str) -> str:
         return ""
 
 
-def _must_change_password(username: str) -> bool:
-    """True enquanto a conta usa uma senha que outra pessoa escolheu (migração ou reset)."""
-    if not _DB_AVAILABLE or not username:
-        return False
-    try:
-        with get_db() as db:
-            row = (db.query(UserPermission.must_change_password)
-                     .filter(UserPermission.username == username).first())
-        return bool(row[0]) if row else False
-    except Exception:
-        return False
-
-
 def _client_ip(request: Request) -> str:
     """IP de origem, atravessando o proxy TLS. Só para limite de taxa e auditoria."""
     if request is None:
@@ -3869,17 +2817,6 @@ def _client_ip(request: Request) -> str:
     return (getattr(client, "host", "") or "")[:64]
 
 
-def _login_throttle_user(username: str) -> dict:
-    """Chave de lockout por USUÁRIO. Usada apenas onde o dono da conta já está autenticado —
-    hoje só na troca da própria senha.
-
-    Não pode ser a mesma chave da sessão (`oid` = username): o lockout por senha errada também
-    rebaixa o papel para Leitor em _current_role, então compartilhar a chave deixaria um
-    administrador virar Leitor por 15 minutos por causa de erros de digitação dele mesmo.
-
-    NÃO É a chave da tela de login. Lá a contagem é por ORIGEM — ver _attempt_source.
-    """
-    return {"oid": f"login:{username}", "email": username}
 
 
 def _attempt_source(request: Request) -> dict:
@@ -3913,15 +2850,9 @@ def _attempt_source(request: Request) -> dict:
 #: Quantas solicitações de acesso um mesmo navegador pode enviar, no total. É um bloqueio duro
 #: (não uma janela deslizante): o pedido é um ato único por pessoa, então cinco tentativas já
 #: cobrem folgadamente erro de digitação e mudança de ideia.
-_ACCESS_REQ_MAX_PER_BROWSER = 5
 #: Rede de proteção por IP, mais alta porque um escritório inteiro sai pelo mesmo endereço.
 #: Existe porque X-Client-Id é enviado pelo cliente e some com uma limpeza de dados do site.
-_ACCESS_REQ_MAX_PER_IP = 15
 
-_ACCESS_REQ_BLOCK_DETAIL = (
-    "Limite de solicitações atingido neste navegador. "
-    "Se você já pediu acesso, aguarde a análise de um administrador."
-)
 
 #: Teto de tentativas de login por MINUTO e por origem. Bem acima do teto por usuário
 #: (_RL_MAX = 10) porque a fábrica inteira sai por um NAT só: às 7h da manhã, dezenas de
@@ -3934,7 +2865,6 @@ _LOGIN_IP_RL_MAX = 60
 #: `_username_of` produz a partir de um e-mail corporativo, e a mesma que a trilha de auditoria
 #: e o console de presença imprimem — um nome fora disso quebraria a leitura dos dois.
 import re as _re_auth
-_USERNAME_RE = _re_auth.compile(r"[a-z0-9][a-z0-9._-]{1,63}")
 
 
 @app.post("/api/auth/login")
@@ -4012,26 +2942,21 @@ def auth_login(request: Request, body: dict = Body(default={})):
 
     # A senha estava certa — mas uma conta banida continua banida. O 403 com X-Blocked é o
     # mesmo que o resto da aplicação emite, então o cliente já sabe desenhar essa tela.
-    if blocked and username not in _SUPERADMINS:
+    if blocked:
         raise HTTPException(status_code=403, detail=_BLOCKED_DETAIL,
                             headers={"X-Blocked": "1", "X-Blocked-Reason": "banned"})
 
     _reset_pw_failures(source)
 
     now = datetime.now(timezone.utc)
-    must_change = False
     try:
         with get_db() as db:
             row = db.query(UserPermission).filter(UserPermission.username == username).first()
             if row is not None:
                 row.last_login = now
-                must_change = bool(row.must_change_password)
                 role = row.role or "reader"
     except Exception as exc:
         logger.warning("[auth] login: last_login(%s) não registrado: %s", username, exc)
-
-    if username in _SUPERADMINS:
-        role = "admin"
 
     token, ttl = issue_session_token(username, email or username)
     _record_security_event(actor=username, target=username, event_type="login",
@@ -4045,7 +2970,6 @@ def auth_login(request: Request, body: dict = Body(default={})):
             "email": email or username,
             "name": display_name_of(username),
             "role": role,
-            "mustChangePassword": must_change,
         },
     }
 
@@ -4069,82 +2993,10 @@ def auth_refresh(user: dict = Depends(require_auth)):
             "email": email,
             "name": display_name_of(uname),
             "role": _current_role(user),
-            "mustChangePassword": _must_change_password(uname),
         },
     }
 
 
-@app.post("/api/auth/change-password")
-def auth_change_password(body: dict = Body(default={}), user: dict = Depends(require_auth)):
-    """Troca a própria senha (exige a senha atual). Qualquer papel, inclusive Leitor.
-
-    Não é uma operação administrativa e por isso NÃO passa pelo segundo fator (ADMIN_PASSWORD):
-    o segundo fator existe para ações de admin sobre a aplicação, e exigi-lo aqui impediria um
-    Leitor de trocar a própria senha — justamente quem mais precisa, já que veio de uma senha
-    gerada pela migração.
-    """
-    if not _DB_AVAILABLE:
-        raise HTTPException(status_code=503, detail="Banco de dados não configurado.")
-    uname   = _username_of((user or {}).get("email", ""))
-    current = str((body or {}).get("currentPassword") or "")
-    new_pw  = str((body or {}).get("newPassword") or "")
-    if not uname:
-        raise HTTPException(status_code=400, detail="Usuário inválido.")
-    if not current or not new_pw:
-        raise HTTPException(status_code=400, detail="Informe a senha atual e a nova senha.")
-    if current == new_pw:
-        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual.")
-    validate_password_strength(new_pw)
-
-    throttle_user = _login_throttle_user(uname)
-    _check_pw_lockout(throttle_user)
-    _rate_limit(throttle_user, "login")
-
-    now = datetime.now(timezone.utc)
-    try:
-        with get_db() as db:
-            row = db.query(UserPermission).filter(UserPermission.username == uname).first()
-            if row is None:
-                raise HTTPException(status_code=404, detail="Conta não encontrada.")
-            if not verify_password(current, row.password_hash):
-                tripped = _record_pw_failure(throttle_user)
-                if tripped:
-                    raise HTTPException(status_code=429, detail=_LOCKOUT_DETAIL,
-                                        headers={"X-Locked-Out": "1"})
-                raise HTTPException(status_code=403, detail="Senha atual incorreta.")
-            row.password_hash = hash_password(new_pw)
-            row.password_set_at = now
-            row.must_change_password = False
-            _log_security_event(db, actor=uname, target=uname, event_type="password_change",
-                                detail="Senha alterada pelo próprio usuário.")
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=_log_and_generic(exc, "auth_change_password"))
-
-    _reset_pw_failures(throttle_user)
-    # Token novo na resposta: a sessão continua exatamente a mesma, mas devolver um token
-    # recém-assinado evita que o cliente fique com um emitido antes da troca e tenha de
-    # deslogar o usuário só para refletir `mustChangePassword: false`.
-    token, ttl = issue_session_token(uname, (user or {}).get("email", "") or uname)
-    return {"ok": True, "token": token, "expiresIn": ttl}
-
-
-
-
-def _access_request_dict(r) -> dict:
-    """Serializa uma solicitação para o painel do admin. O hash da senha NUNCA sai daqui."""
-    return {
-        "id": r.id,
-        "username": r.username,
-        "email": r.email or "",
-        "status": r.status,
-        "note": r.note or "",
-        "created_at": _iso(r.created_at),
-        "decided_at": _iso(r.decided_at),
-        "decided_by": r.decided_by,
-        "decided_role": r.decided_role,
-    }
 
 
 
@@ -4155,62 +3007,20 @@ def _access_request_dict(r) -> dict:
 
 
 
-def _event_facet_col(name: str):
-    """Resolve a facet column name to its ORM column (None ⇒ not a facet). Resolved lazily so
-    this module still imports when the optional DB models are unavailable."""
-    key = (name or "").strip().lower()
-    if key not in _EVENT_FACET_COLS or not _DB_AVAILABLE:
-        return None
-    return getattr(SecurityEvent, key)
-
-
-def _facet_values(raw: str, sep: str = ",") -> list[str]:
-    """Split a separated facet param into the exact values it selects."""
-    return [v.strip() for v in (raw or "").split(sep) if v.strip()]
-
-
-def _facet_filter(query, col, raw: str, sep: str = ","):
-    """Restrict `query` to the selected values of `col`, honouring the blank bucket."""
-    vals = _facet_values(raw, sep)
-    if not vals:
-        return query
-    concrete = [v for v in vals if v != _EVENT_BLANK]
-    clauses = []
-    if concrete:
-        clauses.append(col.in_(concrete))
-    if _EVENT_BLANK in vals:
-        clauses.append(or_(col.is_(None), col == ""))
-    return query.filter(or_(*clauses)) if len(clauses) > 1 else query.filter(clauses[0])
-
-
-def _apply_event_filters(
-    query, target: str, event_type: str, actor: str, detail: str, detail_vals: str = "",
-):
-    """Shared WHERE builder for the audit trail and its facet lists.
-
-    DETAIL takes two independent params, and both may be active at once: `detail` is the
-    legacy free-text CONTAINS search, `detail_vals` the value checklist (newline-separated,
-    see _EVENT_DETAIL_SEP). Keeping the substring search means an existing caller — or a
-    bookmarked URL — still filters the way it always did."""
-    query = _facet_filter(query, SecurityEvent.target,     target)
-    query = _facet_filter(query, SecurityEvent.event_type, event_type)
-    query = _facet_filter(query, SecurityEvent.actor,      actor)
-    query = _facet_filter(query, SecurityEvent.detail,     detail_vals, _EVENT_DETAIL_SEP)
-    if (detail or "").strip():
-        query = query.filter(SecurityEvent.detail.ilike(f"%{detail.strip()}%"))
-    return query
 
 
 
 
 
 
-def _alert_dict(r) -> dict:
-    return {
-        "id": r.id, "ts": _iso(r.ts), "actor": r.actor, "target": r.target,
-        "event_type": r.event_type, "detail": r.detail,
-        "acknowledged_at": _iso(r.acknowledged_at), "acknowledged_by": r.acknowledged_by,
-    }
+
+
+
+
+
+
+
+
 
 
 
@@ -4444,53 +3254,14 @@ def _rebuild_override_map(rows: list) -> dict:
     return out
 
 
-def _sync_override_rows(db, scenario_id: str, overrides_map: dict, who, stats: dict | None = None) -> int:
-    """Diff a LocoOverrideMap against the stored ScheduleOverride rows for `scenario_id` and mirror
-    it: UPDATE changed objects, INSERT new ones, DELETE objects no longer present. Returns the number
-    of desired (persisted) rows. The caller owns the get_db() session. Shared by the base-schedule
-    override save and the Projeção reference save — both persist a LocoOverrideMap into this same
-    delta table (the latter under a reserved scenario_id namespace, see _projref_scenario_id).
 
-    Pass `stats` to receive what THIS save actually changed: {'inserted','updated','deleted','locos'}.
-    The client posts the whole map every time, so the row TOTAL is not a measure of the save — only
-    the diff is. That is what the admin alert reports (see put_overrides)."""
-    st = stats if stats is not None else {}
-    st.setdefault("inserted", 0); st.setdefault("updated", 0); st.setdefault("deleted", 0)
-    touched: set = st.setdefault("locos", set())
-    desired = _flatten_override_map(overrides_map)
-    desired_by_key = {
-        (scenario_id, d["loco_key"], d["scope"], d["scope_key"]): d for d in desired
-    }
-    existing = db.query(ScheduleOverride).filter(
-        ScheduleOverride.scenario_id == scenario_id
-    ).all()
-    existing_by_key = {
-        (e.scenario_id, e.loco_key, e.scope, e.scope_key): e for e in existing
-    }
-    for key, d in desired_by_key.items():
-        pj = json.dumps(d["payload"], separators=(",", ":"), ensure_ascii=False)
-        row = existing_by_key.get(key)
-        if row is not None:
-            if row.payload_json != pj:          # update only when actually changed
-                row.payload_json = pj
-                row.updated_by = who
-                st["updated"] += 1
-                touched.add(d["loco_key"])
-        else:
-            db.add(ScheduleOverride(
-                scenario_id=scenario_id, loco_key=d["loco_key"],
-                scope=d["scope"], scope_key=d["scope_key"],
-                payload_json=pj, updated_by=who,
-            ))
-            st["inserted"] += 1
-            touched.add(d["loco_key"])
-    for key, row in existing_by_key.items():     # drop objects no longer edited
-        if key not in desired_by_key:
-            db.delete(row)
-            st["deleted"] += 1
-            touched.add(row.loco_key)
-    return len(desired)
 
+# ── Schedule visual overrides (persisted DELTA layer; PER SCENARIO) ────────────────────
+# Original Data + Override = Effective Schedule. These endpoints ONLY read/write the
+# schedule_override delta table; the source schedule is never touched. The merge back into a
+# final schedule happens on the client at load time (the worker's applyOverrideToGroup).
+# Every read/write is scoped by scenario_id (the scenario NAME; '' = base DB schedule).
+_BASE_SCENARIO = ""  # scenario_id sentinel for the base DB schedule
 
 # Projeção (Schedule Mode 3) reference snapshot. It is itself a LocoOverrideMap — the standard schedule
 # a planner froze as the deviation baseline — so it is stored in the SAME schedule_override delta table
@@ -4504,6 +3275,15 @@ def _sync_override_rows(db, scenario_id: str, overrides_map: dict, who, stats: d
 # plain text; _is_reserved_scenario_id below keeps a client from reaching these rows through the public
 # scenario parameter, which the NUL used to prevent by accident.
 _PROJREF_PREFIX = "__projref__:"
+
+# Projeção is an isolated future-planning layer: edits made here are visible ONLY in Projeção and can
+# never leak into the operational plan. That isolation is why these deltas need their own namespace —
+# get_overrides must never pick them up.
+#
+# Composition is a per-object REPLACE (frontend mergeOverrideMaps), not an addition, because
+# startShiftDays is absolute-from-base: a Projeção edit states where the object should be, and any
+# object it does not mention transparently inherits Standard.
+_PROJOV_PREFIX = "__projov__:"
 
 
 def _projref_scenario_id(scenario: str) -> str:
@@ -4644,28 +3424,12 @@ def get_projection_baselines(scenario: str = "", _user: dict = Depends(require_a
 
 
 
-def _ensure_logistica_table() -> None:
-    """Idempotently guarantee logistica_base exists before the endpoints touch it — same
-    reasoning as _ensure_projbase_table: startup create_all is best-effort, so a route defined
-    at import time must not be the first thing to discover a missing relation."""
-    try:
-        LogisticaBase.__table__.create(bind=db_engine, checkfirst=True)
-    except Exception as _e:  # never let a create race turn into a request failure
-        logger.warning("[logistica] ensure table: %s", _e)
 
 
 
 
 
 
-def _ensure_gcr_table() -> None:
-    """Idempotently guarantee gcr_plan_snapshot exists — same reasoning as
-    _ensure_logistica_table: startup create_all is best-effort, so a route defined at import
-    time must not be the first thing to discover a missing relation."""
-    try:
-        GcrPlanSnapshot.__table__.create(bind=db_engine, checkfirst=True)
-    except Exception as _e:  # never let a create race turn into a request failure
-        logger.warning("[gcr] ensure table: %s", _e)
 
 
 
@@ -4710,45 +3474,6 @@ def get_saturday_workdays(scenario: str = "", _user: dict = Depends(require_auth
 
 
 
-@app.post("/api/gantt/scenario")
-async def gantt_scenario(
-    request: Request,
-    file: UploadFile = File(...),
-    _user: dict = Depends(require_auth),
-):
-    """
-    Builds Gantt data from an uploaded Schedule-MS Excel file.
-    Uses DB for LocosRout (routing table). Does not modify the DB or cache.
-    Also stores file bytes under a unique scenario_id for later export.
-
-    Authorization: ANY authenticated role, Readers included — loading a scenario is a
-    READ. The upload is parsed in memory and answered; it writes nothing to the DB and
-    does not touch the shared gantt cache, so a Reader cannot alter what anyone else
-    sees. The bytes are held only in the byte-bounded `_scenario_file_cache` to back a
-    later export, and every export route independently demands Editor+ AND the app
-    password — so reaching this endpoint grants a Reader no way to extract a file.
-    """
-    global _scenario_file_cache
-    # This route is the widest of the four: it is the only upload open to Readers, so it is the
-    # one an ordinary account could have used to exhaust the container. It was also the only one
-    # with no filename check at all — the bytes went straight to the parser.
-    _require_excel_upload(file)
-    _reject_oversize_body(request, _UPLOAD_MAX_BYTES)
-    # Read OUTSIDE the try: the blanket `except Exception` below would otherwise swallow the 413
-    # and answer 500 "Erro interno", turning a clear "file too large" into an unexplained failure.
-    file_bytes = await _read_upload_bounded(file)
-    try:
-        from gantt_builder import build_gantt_data_from_scenario_excel
-        data = build_gantt_data_from_scenario_excel(file_bytes)
-        # Store file bytes for export, keep cache bounded by total bytes
-        scenario_id = str(uuid.uuid4())
-        _store_scenario_file(scenario_id, file_bytes)
-        data["scenario_id"] = scenario_id
-        return data
-    except (ValueError, RuntimeError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=_log_and_generic(exc, "endpoint"))
 
 
 
@@ -4864,31 +3589,6 @@ async def gantt_edit_locos(
         raise HTTPException(status_code=500, detail=_log_and_generic(exc, "gantt_optimize"))
 
 
-class _SwapWsBody(BaseModel):
-    """Manual WS40↔WS50 execution-order swap for one ES44 LOCO. The client posts the LOCO's
-    CURRENT WS40/WS50 day-cells (ISO yyyy-mm-dd) exactly as displayed; the server reuses the
-    conflict optimizer's OWN eligibility test (_is_es44) and reorder (_swap_ws_layout) — there
-    is no second swap implementation. Stateless: nothing is read from or written to the DB; the
-    reordered day-sets are returned for the client to store as an ordinary visual override."""
-    wo:         str
-    task_name:  str = ""
-    linha:      str = ""
-    ws40_days:  list[str] = []
-    ws50_days:  list[str] = []
-
-
-
-
-class _OptStreamBody(BaseModel):
-    line_filter: list[str] | None = None  # WO keys currently loaded (coarse filter)
-    loco_filter: list[str] | None = None  # exact LOCO keys "wo||task_name" visible
-    date_from:   str | None = None        # visible window start, ISO yyyy-mm-dd
-    date_to:     str | None = None        # visible window end, ISO yyyy-mm-dd
-    today:       str | None = None        # client's "Today" (ISO yyyy-mm-dd); WS before it are immutable
-    strategy:    str | None = None        # "shift_full" | "shift_conflict_only" (ES44 WS40↔WS50 swap auto in both)
-    use_saturdays: bool = False           # allow WS40/WS50 of conflict LOCOs on Saturdays
-    allow_overlap: bool = False           # "Permitir regras de sobreposição" — boundary/half-day share not a conflict
-    loco_edits: list[_LocoEdit] = []      # manual LOCO edits (session-only) — optimizer runs on the EDITED schedule
 
 
 
@@ -4903,32 +3603,10 @@ class _OptStreamBody(BaseModel):
 
 
 
-def _calendar_month_days(year: int, month: int) -> list[dict]:
-    """Per-day computed calendar for one month (override-aware), for the admin grid."""
-    from calendar import monthrange
-    from datetime import date as _date
-    from services import calendar_445
-    _dow_pt = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
-    ndays = monthrange(year, month)[1]
-    out: list[dict] = []
-    for dnum in range(1, ndays + 1):
-        d = _date(year, month, dnum)
-        forced = calendar_445.is_forced_working(d)
-        working = calendar_445.is_working_day(d)
-        out.append({
-            "date":       d.isoformat(),
-            "day":        dnum,
-            "dow":        _dow_pt[d.weekday()],
-            "weekday":    d.weekday(),           # 0=Mon … 6=Sun
-            "fw":         calendar_445.fw_label(d),
-            # 4-4-5 fiscal month (1-12) this day's week rolls up to — for the fiscal-structure
-            # overlay. Derived from the RAW week bucket so period grouping is offset-independent.
-            "fiscal_month": calendar_445.fiscal_month_of_fw(calendar_445.fw_of(d)),
-            "is_weekend": d.weekday() >= 5 and not forced,
-            "is_working": working,
-            "is_holiday": calendar_445.is_holiday_day(d),
-        })
-    return out
+
+
+
+
 
 
 
@@ -5086,63 +3764,12 @@ def get_headcount(_user: dict = Depends(require_auth)):
 
 
 
-def _headcount_float(v) -> float | None:
-    try:
-        return float(v) if v not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
 
 
-def _headcount_int(v) -> int | None:
-    try:
-        return int(float(v)) if v not in (None, "") else None
-    except (TypeError, ValueError):
-        return None
 
 
-def _expertise_level(v) -> int | None:
-    """Coerce an expertise level to the 0–3 domain, or None for 'never assessed'.
-
-    Clamped rather than rejected: this is a 4-state picker on the client, so anything outside
-    the domain is a bug or a hand-rolled request, and neither is worth failing a whole save
-    over. 0 is a REAL value here (not qualified / no bar) and is stored as 0, not as NULL —
-    they read the same but only one of them is a statement someone made."""
-    if v in (None, ""):
-        return None
-    try:
-        return max(0, min(3, int(float(v))))
-    except (TypeError, ValueError):
-        return None
 
 
-def _expertise_provenance(payload: dict, prefix: str = "expertise") -> tuple[str, str | None]:
-    """(source, answers-as-JSON) for an expertise write.
-
-    `prefix` picks which pair of payload keys to read — `expertise_*` for a person↔workstation
-    pair, `required_*` for a workstation's own target. The rules below are identical for both;
-    only the field names differ.
-
-    Answers are only kept when they are exactly three values in 1–3 AND the source says quiz —
-    anything else is stored as a manual assignment with no answers, so a malformed or invented
-    payload degrades to "someone typed a level", never to a fake assessment record.
-
-    The source carries the QUESTION SET VERSION as `quiz@N` (bare `quiz` is the unversioned
-    original, i.e. v1). It is stored verbatim so the client can tell whether stored answers were
-    given to the questions it is about to show: when they were not, the LEVEL still stands and
-    only the pre-fill is retired. See EXPERTISE_QUIZ_VERSION in frontend/src/lib/expertise.ts."""
-    source = str(payload.get(f"{prefix}_source") or "manual").strip().lower()
-    if source != "quiz" and not (source.startswith("quiz@") and source[5:].isdigit()):
-        return "manual", None
-    raw = payload.get(f"{prefix}_answers")
-    if not isinstance(raw, (list, tuple)) or len(raw) != 3:
-        return "manual", None
-    try:
-        vals = [int(x) for x in raw]
-    except (TypeError, ValueError):
-        return "manual", None
-    if any(v < 1 or v > 3 for v in vals):
-        return "manual", None
-    return source, json.dumps(vals)
 
 
 

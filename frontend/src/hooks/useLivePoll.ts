@@ -4,7 +4,7 @@ import { getLastBackendContactAt, onBackendContact, isBackendUnavailable } from 
 import { nextPollDelay, shouldPollOrActive } from '@/lib/awakeWindow'
 
 // ── Live refresh for the admin indicators (online users, admin alerts) ───────────
-// Shared by every header counter that must look real-time without holding Railway's
+// Shared by every header counter that must look real-time without holding the host's
 // backend awake. Three things drive a refresh:
 //
 //   1. An ADAPTIVE beat — ~30s while the app is actively used, ~5 min once it goes

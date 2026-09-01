@@ -1,7 +1,7 @@
 'use client'
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { X, BarChart2, Layers, Loader2, FlaskConical, GitCompare, AlertTriangle } from 'lucide-react'
-import { getGanttData, postGanttScenario } from '@/lib/api'
+import { getGanttData } from '@/lib/api'
 import type { GanttData } from '@/lib/api'
 import { getToken, refreshToken } from '@/lib/tokenStore'
 import { LocomotiveProgress, LINE_TYPE_COLORS } from './gantt/LocomotiveProgress'
@@ -58,7 +58,7 @@ export function clampDate(val: string, min: string, max: string): string {
 // Tab labels for the "resume in …" hint on the launch button — must stay in sync
 // with the TABS array in GanttModal.
 const TAB_LABELS: Record<0 | 1 | 2 | 3, string> = {
-  0: 'Resumo Geral', 1: 'GETSA Planned', 2: 'Plano de Produção', 3: 'Schedule Geral',
+  0: 'Resumo Geral', 1: 'Plano Externo', 2: 'Plano de Produção', 3: 'Schedule Geral',
 }
 
 // Flavour text shown under the locomotive band while it loads — one is picked per load so
@@ -186,30 +186,6 @@ export function GanttLaunchModal({
     return status === 401 || status === 403
   }
 
-  async function handleCompareUpload(which: 'base' | 'target', file: File) {
-    const setSlot = which === 'base' ? setCmpBase : setCmpTarget
-    // 40 MB ceiling, matching the server's. Checked before the request so the refusal is
-    // immediate instead of a 413 arriving at the end of the upload — see lib/uploadLimits.
-    const tooBig = checkUploadSize(file)
-    if (tooBig) { setSlot(s => ({ ...s, loading: false, error: tooBig })); return }
-    setSlot(s => ({ ...s, loading: true, error: null }))
-    try {
-      // The axios interceptor already performs silent reauth + retry on a 401, so a
-      // successful upload "just works" even across a token expiry.
-      const data = await postGanttScenario(file)
-      setSlot(s => ({ ...s, data, name: file.name, loading: false, error: null }))
-    } catch (err: unknown) {
-      // Never surface a token/auth error inside Compare. If reauth genuinely failed,
-      // the app-level re-login (driven by tokenReady) handles it on the previous Gantt
-      // screen; here we just clear the spinner so the user can retry after re-auth —
-      // their other scenario selection is preserved.
-      if (isAuthError(err)) {
-        setSlot(s => ({ ...s, loading: false, error: null }))
-        return
-      }
-      setSlot(s => ({ ...s, data: null, name: '', loading: false, error: extractErrorMessage(err) }))
-    }
-  }
 
   // A slot is "ready" when it has a resolved source: DB (cache present) or an upload.
   const slotReady = (s: CompareSlot) => s.useDb ? !!ganttCache : !!s.data
@@ -333,42 +309,7 @@ export function GanttLaunchModal({
     return () => clearInterval(interval)
   }, [loadingFor])
 
-  // Drag & drop targets — each funnels into the same upload handler as its button,
-  // so validation, progress and error handling are shared.
-  const XLS_EXT = ['.xlsx', '.xls']
-  const scenarioDrop = useFileDrop({
-    onFile:   f => { void handleScenarioUpload(f) },
-    accept:   XLS_EXT,
-    disabled: scenarioLoading || loadingFor !== null,
-    onReject: setScenarioError,
-  })
-  const cmpBaseDrop = useFileDrop({
-    onFile:   f => { void handleCompareUpload('base', f) },
-    accept:   XLS_EXT,
-    disabled: cmpBase.loading,
-    onReject: msg => setCmpBase(s => ({ ...s, error: msg })),
-  })
-  const cmpTargetDrop = useFileDrop({
-    onFile:   f => { void handleCompareUpload('target', f) },
-    accept:   XLS_EXT,
-    disabled: cmpTarget.loading,
-    onReject: msg => setCmpTarget(s => ({ ...s, error: msg })),
-  })
 
-  async function handleScenarioUpload(file: File) {
-    const tooBig = checkUploadSize(file)
-    if (tooBig) { setScenarioError(tooBig); return }
-    setScenarioLoading(true); setScenarioError(null)
-    try {
-      const data = await postGanttScenario(file)
-      setScenarioData(data); setScenarioName(file.name)
-      onScenarioChange?.(data, file.name)
-    } catch (err: unknown) {
-      setScenarioError(extractErrorMessage(err))
-      setScenarioData(null); setScenarioName('')
-      onScenarioChange?.(null, '')
-    } finally { setScenarioLoading(false) }
-  }
 
   const fromISO = ddmmToISO(expandYear(dateFrom))
   const toISO   = ddmmToISO(expandYear(dateTo))
@@ -842,33 +783,6 @@ export function GanttLaunchModal({
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
-            <div className="flex gap-1.5">
-              {/* Also a drop target: dropping an .xlsx here runs the same upload as clicking. */}
-              <button onClick={() => scenarioInputRef.current?.click()} disabled={scenarioLoading || loadingFor !== null}
-                title="Clique para escolher um arquivo ou arraste o .xlsx até aqui"
-                {...scenarioDrop.dropProps}
-                className={`flex items-center justify-center gap-2 flex-1 px-3 py-2 text-xs rounded-lg border border-dashed font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                  scenarioDrop.dragging
-                    ? 'border-[#D32F2F] bg-[#FFF5F5] text-[#D32F2F]'
-                    : 'border-gray-300 hover:border-[#D32F2F] hover:bg-[#FFF5F5] text-gray-500 hover:text-[#D32F2F]'}`}
-              >
-                {scenarioLoading
-                  ? <><Loader2 size={13} className="animate-spin" /> Carregando…</>
-                  : scenarioDrop.dragging
-                    ? <><FlaskConical size={13} /> Solte o arquivo aqui</>
-                    : <><FlaskConical size={13} /> Simular Cenário</>}
-              </button>
-              <button
-                onClick={() => setShowCompare(true)}
-                disabled={loadingFor !== null || scenarioLoading}
-                className="flex items-center justify-center gap-2 flex-1 px-3 py-2 text-xs rounded-lg border border-dashed border-gray-300 hover:border-[#D32F2F] hover:bg-[#FFF5F5] text-gray-500 hover:text-[#D32F2F] font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <GitCompare size={13} /> Comparar Cenário
-              </button>
-            </div>
-            <input ref={scenarioInputRef} type="file" accept=".xlsx,.xls" className="hidden"
-              onChange={e => { const file = e.target.files?.[0]; if (file) handleScenarioUpload(file); e.target.value = '' }}
-            />
             {!comparisonActive && scenarioData && (
               <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg">
                 <FlaskConical size={13} style={{ color: '#D97706', flexShrink: 0 }} />
@@ -941,129 +855,6 @@ export function GanttLaunchModal({
       )}
     </div>
 
-    {/* ── Comparar Cenário ─────────────────────────────────────────────────── */}
-    {showCompare && (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50" onClick={e => { if (e.target === e.currentTarget) setShowCompare(false) }}>
-        <div className="bg-white rounded-lg shadow-2xl flex flex-col w-[520px] max-w-[94vw] overflow-hidden relative">
-          <div className="bg-[#D32F2F] text-white flex items-center justify-between px-4 py-2.5 shrink-0">
-            <div className="flex items-center gap-2">
-              <GitCompare size={15} />
-              <span className="font-semibold text-sm tracking-wide">Comparar Cenário</span>
-            </div>
-            <button onClick={() => setShowCompare(false)} className="rounded p-1 hover:bg-white/20 transition-colors" title="Fechar"><X size={16} /></button>
-          </div>
-          <div className="p-3 flex flex-col gap-2.5">
-            {/* Base + Target side by side. */}
-            <div className="grid grid-cols-2 gap-2.5">
-              {([
-                { key: 'base'   as const, label: 'Base',   slot: cmpBase,   setSlot: setCmpBase,   inputRef: cmpBaseInputRef,   drop: cmpBaseDrop   },
-                { key: 'target' as const, label: 'Target', slot: cmpTarget, setSlot: setCmpTarget, inputRef: cmpTargetInputRef, drop: cmpTargetDrop },
-              ]).map(({ key, label, slot, setSlot, inputRef, drop }) => {
-                const ready = slotReady(slot)
-                return (
-                  <div key={key} className="rounded-lg overflow-hidden flex flex-col h-full" style={{ border: `1.5px solid ${ready ? '#E5E7EB' : '#FECACA'}` }}>
-                    {/* ONE header line for both cards: the Base / Target label plus the "Banco de
-                        dados" source toggle sitting right next to it. Keeping the toggle up here is
-                        what lets the body below always be a single block of the same height, so the
-                        two cards never end up one line taller than each other. */}
-                    <div className="px-2.5 py-1.5 border-b flex items-center justify-between gap-1.5 h-[30px]" style={{ background: ready ? '#F9FAFB' : '#FFF5F5', borderColor: ready ? '#F3F4F6' : '#FECACA' }}>
-                      <span className="text-[11px] font-bold uppercase tracking-wide shrink-0" style={{ color: ready ? '#6B7280' : '#D32F2F' }}>
-                        {label} <span style={{ color: '#D32F2F', fontWeight: 800 }}>*</span>
-                      </span>
-                      {ready ? (
-                        <span className="text-[11px] font-semibold text-emerald-600">✓</span>
-                      ) : (
-                        <label className="flex items-center gap-1 cursor-pointer select-none min-w-0" title="Usa o banco de dados com o período e tipos atuais">
-                          <input
-                            type="checkbox"
-                            checked={slot.useDb}
-                            onChange={e => setSlot(s => ({ ...s, useDb: e.target.checked, error: null }))}
-                            style={{ accentColor: '#D32F2F', cursor: 'pointer', width: 12, height: 12, flexShrink: 0 }}
-                          />
-                          <span className="text-[10.5px] text-gray-700 truncate">Banco de dados</span>
-                        </label>
-                      )}
-                    </div>
-                    {/* Body — exactly ONE block, stretched over the two lines the source picker
-                        used to take: the loaded scenario, the DB source, or the Excel drop zone. */}
-                    <div className="px-2.5 py-2 flex flex-col gap-1.5 flex-1">
-                      {ready ? (
-                        // Loaded — show ONLY the scenario card + a remove (✕) to change it.
-                        slot.useDb ? (
-                          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-[#FFF5F5] border border-[#FECACA] rounded flex-1 min-h-[44px]">
-                            <BarChart2 size={13} style={{ color: '#D32F2F', flexShrink: 0 }} />
-                            <span className="text-[11px] text-gray-600 truncate flex-1">Banco de dados</span>
-                            <button onClick={() => setSlot(s => ({ ...s, useDb: false, error: null }))}
-                              className="text-[11px] text-[#D32F2F] hover:text-[#b71c1c] font-medium px-0.5 rounded hover:bg-[#FFE5E5]" title="Remover / trocar cenário">✕</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 px-2 py-1.5 bg-amber-50 border border-amber-200 rounded flex-1 min-h-[44px]">
-                            <FlaskConical size={12} style={{ color: '#D97706', flexShrink: 0 }} />
-                            <span className="text-[11px] text-amber-700 truncate flex-1" title={slot.name}>{slot.name}</span>
-                            <button onClick={() => setSlot(s => ({ ...s, data: null, name: '', error: null }))}
-                              className="text-[11px] text-amber-600 hover:text-amber-800 font-medium px-0.5 rounded hover:bg-amber-100" title="Remover / trocar cenário">✕</button>
-                          </div>
-                        )
-                      ) : slot.useDb ? (
-                        <div className="flex items-center gap-1.5 px-2 py-1.5 bg-[#FFF5F5] border border-[#FECACA] rounded flex-1 min-h-[44px]">
-                          <BarChart2 size={13} style={{ color: '#D32F2F', flexShrink: 0 }} />
-                          <span className="text-[11px] text-gray-600 truncate">Carregando…</span>
-                        </div>
-                      ) : (
-                        <>
-                          {/* Drop target as well as a picker — same handler either way. */}
-                          <button
-                            onClick={() => inputRef.current?.click()}
-                            disabled={slot.loading}
-                            title="Clique para escolher um arquivo ou arraste o .xlsx até aqui"
-                            {...drop.dropProps}
-                            className={`flex items-center justify-center gap-1.5 w-full flex-1 min-h-[44px] px-2 py-1.5 text-xs rounded-md border border-dashed font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                              drop.dragging
-                                ? 'border-[#D32F2F] bg-[#FFF5F5] text-[#D32F2F]'
-                                : 'border-gray-300 hover:border-[#D32F2F] hover:bg-[#FFF5F5] text-gray-500 hover:text-[#D32F2F]'}`}
-                          >
-                            {slot.loading
-                              ? <><Loader2 size={13} className="animate-spin" /> Carregando…</>
-                              : drop.dragging
-                                ? <><FlaskConical size={13} /> Solte aqui</>
-                                : <><FlaskConical size={13} /> Importar Excel</>}
-                          </button>
-                          <input ref={inputRef} type="file" accept=".xlsx,.xls" className="hidden"
-                            onChange={e => { const f = e.target.files?.[0]; if (f) handleCompareUpload(key, f); e.target.value = '' }}
-                          />
-                          {slot.error && <div className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1">{slot.error}</div>}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-            {cmpBothDb && (
-              <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-2 py-1.5">
-                Os dois não podem usar o banco de dados — os dados seriam idênticos. Importe um Excel em pelo menos um.
-              </div>
-            )}
-            {!periodValid && !cmpBothDb && (
-              <div className="text-[10px] text-gray-500">
-                O período pode ser definido depois — a comparação o aplicará automaticamente aos dois cenários.
-              </div>
-            )}
-            <div className="flex gap-2">
-              <button onClick={() => setShowCompare(false)}
-                className="flex-1 px-3 py-1.5 text-sm rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50 font-medium transition-colors">
-                Cancelar
-              </button>
-              <button onClick={handleCompareConfirm} disabled={!compareValid}
-                className="flex-1 px-3 py-1.5 text-sm rounded-md text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ background: '#D32F2F' }}>
-                Concluir
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
     </>
   )
 }

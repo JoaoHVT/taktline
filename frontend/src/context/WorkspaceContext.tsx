@@ -2,7 +2,7 @@
  * WorkspaceContext
  *
  * Central shared state for the main workspace.
- * Mirrors the state owned by MainWindow in CapB3356103.py.
+ * Mirrors the state owned by MainWindow in the original desktop tool.
  */
 'use client'
 import { createContext, useContext, useState, useCallback, useMemo } from 'react'

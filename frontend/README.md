@@ -1,6 +1,6 @@
-# OptVision — Frontend
+# Taktline — Frontend
 
-Next.js 16 (App Router) + React 19 + TypeScript client for both OptVision feature areas:
+Next.js 16 (App Router) + React 19 + TypeScript client for both Taktline feature areas:
 **Capacity Analysis** and **Factory Load** (Schedule / Gantt).
 
 > Repository overview: [`../README.md`](../README.md) ·

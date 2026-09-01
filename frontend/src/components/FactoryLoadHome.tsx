@@ -18,17 +18,14 @@
  *   standby  (today < start) → ES_FRONT icon + "Standby" badge (no percentage)
  *
  * Actual hours (green) come from the Horas Transacionadas snapshot stored in our own DB,
- * never from Denodo — so every role sees them. NEW LOCOS ONLY: hours reach a locomotive
+ * never from the warehouse — so every role sees them. NEW LOCOS ONLY: hours reach a locomotive
  * through the work-order-prefix rule, which is only known to hold for that type. Other
  * Tipos render planned-only, exactly as before.
  */
 import { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { ChevronDown, Clock, AlertTriangle } from 'lucide-react'
 import { useGanttInlineMaybe } from '@/context/GanttInlineContext'
-import {
-  transactedHoursRollup,
-  type TransactedHoursRollup, type TransactedHoursScope, type LocoScope,
-} from '@/lib/api'
+import type { TransactedHoursRollup, TransactedHoursScope, LocoScope } from '@/lib/api'
 import { SUMMARY_LINE_TYPE_MAP, getTipoGeral } from '@/components/gantt/useGanttFilters'
 import { TIPO_LABEL, type TipoKey } from '@/lib/tipos'
 import { RED, RED_LT, fmt, wsSubLabel, monthKeyQuarter } from '@/lib/ganttUtils'
@@ -131,7 +128,7 @@ const COL = { icon: 24, status: 132, counter: 62, date: 100, hours: 132, bars: 1
 
 // ── Small building blocks ──────────────────────────────────────────────────────
 
-/** Rotating Wabtec logo centered in a placeholder container (Capacity Analysis pattern). */
+/** Rotating the app logo centered in a placeholder container (Capacity Analysis pattern). */
 function SpinnerCard({ height = 120 }: { height?: number }) {
   return (
     <div style={{
@@ -491,7 +488,7 @@ export function FactoryLoadHome() {
   }, [effectiveData, summaryLineTypes, selModels, selAreas, selWorkstations, activeBizISOs, mergeLocos])
 
   // ── Actual (transacted) hours ────────────────────────────────────────────────
-  // Read from the snapshot phase 1 stored in our own DB — never from Denodo — so this
+  // Read from the snapshot phase 1 stored in our own DB — never from the warehouse — so this
   // works for every role and every session.
   //
   // EVERY Tipo is in scope, not just New Locos. The old restriction existed because the
@@ -539,7 +536,8 @@ export function FactoryLoadHome() {
     }
   }, [hierarchy])
 
-  const [storedRollup, setStoredRollup] = useState<TransactedHoursRollup | null>(null)
+  // Actual hours arrive only as an inline prévia now; there is no stored snapshot to read.
+  const storedRollup: TransactedHoursRollup | null = null
 
   // Stable identity for the scope: the names alone are enough, because routing only ever
   // changes alongside them.
@@ -554,18 +552,6 @@ export function FactoryLoadHome() {
     publishLocos?.(rollupScope)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- locosKey is rollupScope's stable identity
   }, [locosKey, publishLocos])
-
-  useEffect(() => {
-    if (!rollupScope.locos.length) { setStoredRollup(null); return }
-    const ctrl = new AbortController()
-    transactedHoursRollup(rollupScope, ctrl.signal)
-      .then(r => setStoredRollup(r))
-      // Silent: actual hours are an enrichment. A failure leaves the planned view intact
-      // rather than blanking a page that was perfectly usable before this feature existed.
-      .catch(() => { /* keep the planned-only view */ })
-    return () => ctrl.abort()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- locosKey is newLocoNames' stable identity
-  }, [locosKey])
 
   // An unsaved prévia WINS over the stored snapshot. That is the point of applying it: the
   // user is checking this exact mapping before paying for the write, so the screen has to
@@ -801,7 +787,7 @@ export function FactoryLoadHome() {
           </div>
         )}
 
-        {/* Placeholder containers with the rotating Wabtec logo while loading
+        {/* Placeholder containers with the rotating the app logo while loading
             (Capacity Analysis pattern), replaced by the hierarchy when ready */}
         {loadingContent ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

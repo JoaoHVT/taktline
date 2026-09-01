@@ -1,5 +1,5 @@
 /**
- * AppHeader -- replicates the MainWindow toolbar from CapB3356103.py
+ * AppHeader -- replicates the MainWindow toolbar from the original desktop tool
  *
  * Layout:
  *   LEFT:  [Adicionar] [Simular] [Otimizar] | [Cliente] [Família] [Tipo] [Limpar]
@@ -34,7 +34,6 @@ import { FilterBox } from '@/components/gantt/FilterBox'
 import { MONTH_NAMES_PT, quarterLabel, windowGanttData } from '@/lib/ganttUtils'
 import { SCHEDULE_TIPO_KEYS, DEFAULT_TIPO_KEY, TIPO_LABEL, anyScheduleBacked } from '@/lib/tipos'
 import { makeFactoryLoadLoader, factoryLoadScope } from '@/lib/factoryLoadImport'
-import type { DbKey } from '@/context/ImportJobsContext'
 import type { GanttData, TransactedHoursScope } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { Reveal } from '@/hooks/useReveal'
@@ -44,9 +43,8 @@ import { useGanttInlineMaybe } from '@/context/GanttInlineContext'
 import { useFactoryLoadShare, useFactoryLoadPublisherId } from '@/context/FactoryLoadShareContext'
 import { APP_NAMES } from '@/lib/appNames'
 import { usePermissions } from '@/context/PermissionsContext'
-import { ChangePasswordModal } from '@/components/ChangePasswordModal'
 import { ContextMenu, type CtxMenuItem } from '@/components/OptimizationResultsModal/ContextMenu'
-import { Users, Plus, Clock, ClipboardList, Power, KeyRound } from 'lucide-react'
+import { Users, Plus, Clock, ClipboardList, Power } from 'lucide-react'
 
 // ── Session serialization helpers ────────────────────────────────────────────
 // Sets aren't JSON-serializable, so filters/override sets round-trip through arrays.
@@ -891,14 +889,13 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   // Avatar circle tint by permission level (same palette as Manage Users):
   // Reader → grey, Editor → amber, Admin → red. Initials stay unchanged.
   const roleBadgeColor = role === 'admin' ? '#D32F2F' : role === 'editor' ? '#D97706' : '#9CA3AF'
-  const [showChangePw, setShowChangePw] = useState(false)
   const [userMenu, setUserMenu] = useState<{ x: number; y: number } | null>(null)
   // "+" extras menu beside the avatar (Editor+). Kept separate from `userMenu` so the
   // avatar's own right-click menu keeps its admin-only item set unchanged.
   const [plusMenu, setPlusMenu] = useState<{ x: number; y: number } | null>(null)
 
   // Opening this screen costs nothing and writes nothing: it reads the stored snapshot's
-  // status and, on demand, queries Denodo with the user's OWN credentials. So no password
+  // status and, on demand, queries the warehouse with the user's OWN credentials. So no password
   // is asked for here — Editor+ (already checked on the "+" button) is the gate to reach
   // it. The password that matters is the IMPORT_PASSWORD inside the modal, which is what
   // authorizes the WRITE, and it is joined there by the admin second factor on the save
@@ -915,18 +912,6 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   const [showSolverLog,     setShowSolverLog]     = useState(false)
   const [showOptResults,    setShowOptResults]    = useState(false)
   const [showSaveLoad,      setShowSaveLoad]      = useState(false)
-  const [showExcel,         setShowExcel]         = useState(false)
-  const [excelInitialDb,    setExcelInitialDb]    = useState<DbKey | undefined>(undefined)
-  // Secure in-app dataset viewer/editor (repurposed from the old "Download Bases" area).
-  const [showDbViewer,      setShowDbViewer]      = useState(false)
-  const [dbViewerInitial,   setDbViewerInitial]   = useState<DbKey | undefined>(undefined)
-  // Datasets each app may import/download:
-  //   Factory Load (gantt)      → Schedule + Locos Rout
-  //   Capacity Analysis (analise) → Itens Rout + Plano Prod (two normalized files
-  //     uploaded independently; they replace the legacy combined 'Discretizado')
-  const importDbScope: DbKey[] = mode === 'gantt'
-    ? ['schedule', 'locos_rout']
-    : ['itens_rout', 'plano_prod']
   const [showGantt,          setShowGantt]          = useState(false)
   const [showGanttLaunch,    setShowGanttLaunch]    = useState(false)
   const [ganttInitialTab,    setGanttInitialTab]    = useState<0 | 1 | 2 | 3>(0)
@@ -1624,7 +1609,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   }
 
   // 'sleeping' = outside working hours (08:00–18:00, seg–sex), so the health poll is paused
-  // to let Railway sleep the backend. A hollow dot reads as "dormant" even in the collapsed
+  // to let the host sleep the backend. A hollow dot reads as "dormant" even in the collapsed
   // view, where only the dots render and a second shade of grey would be indistinguishable
   // from 'online'. Stays in palette — no green.
   const statusConfig = {
@@ -2172,7 +2157,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
         <div className="relative flex items-center shrink-0 pl-1 pr-6">
           <Image
             src="/imagens/wab2.png"
-            alt="Wabtec logo"
+            alt="the app logo"
             height={40}
             width={120}
             className="object-contain"
@@ -2311,11 +2296,6 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
           x={userMenu.x}
           y={userMenu.y}
           items={[
-            ...(currentUser ? [{
-              label: 'Alterar Senha',
-              icon: <KeyRound size={14} />,
-              onClick: () => setShowChangePw(true),
-            }] : []),
           ]}
           onClose={() => setUserMenu(null)}
         />
@@ -2345,9 +2325,6 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
 
 
 
-      {showChangePw && currentUser && (
-        <ChangePasswordModal onClose={() => setShowChangePw(false)} />
-      )}
 
 
 
@@ -2780,7 +2757,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
           hasPreviousResult={lastSolverRows.length > 0}
           onRunSolver={(params: OptimizationParams) => {
             try {
-              window.sessionStorage.removeItem('optvision_active_job_id')
+              window.sessionStorage.removeItem('taktline_active_job_id')
             } catch {
               // Ignore storage errors.
             }

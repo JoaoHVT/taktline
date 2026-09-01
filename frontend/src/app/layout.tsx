@@ -5,7 +5,7 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'MasterPlanner - Wabtec Optimization Tool',
+  title: 'Taktline',
   description: 'Sistema de otimização de alocação de pessoas por WSN',
   icons: {
     icon: '/imagens/wab1.png',

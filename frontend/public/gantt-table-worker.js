@@ -1535,7 +1535,7 @@ function _shieldIcon(color, size) {
 }
 
 // Two-arrow swap icon — marks a LOCO whose WS40↔WS50 order was swapped during
-// optimization (ES44 swap, available in any strategy). Neutral gray, icon-only.
+// optimization (MX10 swap, available in any strategy). Neutral gray, icon-only.
 function _swapIcon(color, size) {
   const s = size || 10
   return `<svg width="${s}" height="${s}" viewBox="0 0 16 16" style="flex-shrink:0"><path d="M4 4h7l-2-2M12 12H5l2 2" fill="none" stroke="${color}" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`
@@ -3025,7 +3025,7 @@ function applyWsEdits(group, wsEdits, axis) {
   // running cascade below is DATE-sorted, so a station sequenced AFTER PD that happens to START EARLIER
   // than PD by date (legacy layouts: "External ICI"/"Correction External ICI" overlapping or preceding
   // the buffer) would be reached BEFORE PD zeros the cascade and get dragged with it — sliding off the
-  // buffer (seen on ES443026, pulled before PD; ES442826, pushed +2 after it). Flagging post-PD by the
+  // buffer (seen on MX1030, pulled before PD; MX1028, pushed +2 after it). Flagging post-PD by the
   // workstations' own ORDER fixes it regardless of dates. Boundary = the LAST PD station, so a normal
   // trailing-PD loco flags nothing and is byte-identical; only locos with work sequenced after PD are
   // touched. A post-PD station still honors its OWN direct edit (item-5 manual correction) — only the
@@ -3060,7 +3060,7 @@ function applyWsEdits(group, wsEdits, axis) {
   // pre-PD/PD stations regardless of date. This is what lets post-PD stations inherit the cascade that
   // EXITS Protection Days (pdExcess, published when PD's group is processed) instead of the raw pre-PD
   // cascade — so a delay smaller than the buffer never drags a post-PD station that merely happens to
-  // START EARLIER than PD by date (the ES443026/ES442826 "External ICI" legacy layouts), while a delay
+  // START EARLIER than PD by date (the MX1030/MX1028 "External ICI" legacy layouts), while a delay
   // that OUTGREW the buffer flows through them. Ordering only drives the cascade math; the render keeps
   // the original workstation array order (xform write-back below).
   const placed = stations.filter(s => s.end >= s.start)

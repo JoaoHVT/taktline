@@ -149,7 +149,7 @@ function exportFileName(title: string): string {
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
   const stamp = new Date().toISOString().slice(0, 10)
-  return `optvision-${slug || 'grafico'}-${stamp}.png`
+  return `taktline-${slug || 'grafico'}-${stamp}.png`
 }
 
 export function SummaryAreaChart(props: SummaryAreaChartProps) {
@@ -392,7 +392,7 @@ export function SummaryAreaChart(props: SummaryAreaChartProps) {
       setTimeout(() => URL.revokeObjectURL(href), 0)
       setExportState('idle')
     } catch (err) {
-      console.error('[OptVision] chart PNG export failed:', err)
+      console.error('[Taktline] chart PNG export failed:', err)
       setExportState('error')
     }
   }

@@ -86,11 +86,11 @@ export function DataSummaryStep({ data, onReset }: Props) {
 
     filters.ano    ? `Ano ${filters.ano}`    : null,
 
-    filters.mes    ? `MÃªs ${filters.mes}`    : null,
+    filters.mes    ? `Mês ${filters.mes}`    : null,
 
     filters.escopo ? `Escopo ${filters.escopo}` : null,
 
-  ].filter(Boolean).join(' Â· ') || 'Sem filtros'
+  ].filter(Boolean).join(' · ') || 'Sem filtros'
 
 
 
@@ -108,11 +108,11 @@ export function DataSummaryStep({ data, onReset }: Props) {
 
             <span className="font-medium text-gray-600">{data.sheets_loaded.join(', ')}</span>
 
-            {' Â· '}
+            {' · '}
 
             {filterDesc}
 
-            {' Â· '}
+            {' · '}
 
             {data.preview.rows.toLocaleString('pt-BR')} linhas brutas
 
@@ -166,7 +166,7 @@ export function DataSummaryStep({ data, onReset }: Props) {
 
           icon={<Users size={20} />}
 
-          label="Pessoas Ãºnicas"
+          label="Pessoas únicas"
 
           value={uniquePeople}
 
@@ -178,7 +178,7 @@ export function DataSummaryStep({ data, onReset }: Props) {
 
           icon={<BarChart2 size={20} />}
 
-          label="MÃ©dia por WSN"
+          label="Média por WSN"
 
           value={`${wsn_list.length ? (total_demand_h / wsn_list.length).toFixed(0) : 0} h`}
 

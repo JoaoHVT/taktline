@@ -65,7 +65,7 @@ export default function ErrorBoundary({
   const [retrying] = useState(() => !stale && Date.now() - lastAutoRetry > RETRY_COOLDOWN_MS)
   const [showDetails, setShowDetails] = useState(false)
 
-  useEffect(() => { console.error('[OptVision] render error:', error) }, [error])
+  useEffect(() => { console.error('[Taktline] render error:', error) }, [error])
 
   useEffect(() => {
     // Declined (a reload was already tried and did not help) → this is not a stale build after

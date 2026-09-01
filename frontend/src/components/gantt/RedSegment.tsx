@@ -2,9 +2,9 @@
 /**
  * RedSegment — the small red segmented toggle used for view-mode switching
  * (e.g. Mensal / Semanal) across the Gantt modal tabs. Extracted so Resumo Geral,
- * GETSA Planned and any other tab share ONE implementation and look identical.
+ * Plano Externo and any other tab share ONE implementation and look identical.
  *
- * `red` lets callers pass their local accent (GETSA receives RED as a prop); it
+ * `red` lets callers pass their local accent (Plano Externo receives RED as a prop); it
  * defaults to the shared ganttUtils RED so existing call-sites need not change.
  */
 import { RED as DEFAULT_RED } from '@/lib/ganttUtils'

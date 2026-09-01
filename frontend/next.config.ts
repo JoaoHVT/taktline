@@ -14,7 +14,7 @@ function localIPv4s(): string[] {
   return out;
 }
 
-// The LAN front door is Caddy on https://<hostname>.local (see ~/.optvision/tools/Caddyfile).
+// The LAN front door is Caddy on https://<hostname>.local (see ~/.taktline/tools/Caddyfile).
 // Requests then reach `next dev` with that Origin, and Next refuses cross-origin dev requests
 // that are not listed here — so the mDNS name has to be present or the LAN app 403s on HMR
 // and on the dev asset routes.
@@ -40,7 +40,7 @@ const allowedDevOrigins = Array.from(
 // As duas destinacoes que a aplicacao usa: ela mesma ('self') e o backend
 // (NEXT_PUBLIC_API_URL / NEXT_PUBLIC_WS_URL).
 //
-// login.microsoftonline.com SAIU da politica junto com o Entra ID. Ele estava aqui em tres
+// the former identity provider SAIU da politica junto com o Entra ID. Ele estava aqui em tres
 // diretivas porque o MSAL precisava das tres: connect-src para o token, frame-src para o
 // iframe escondido da renovacao silenciosa e form-action para o POST do fluxo de login. O
 // login agora e um formulario desta propria aplicacao contra /api/auth/login, entao nenhuma

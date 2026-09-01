@@ -6,7 +6,7 @@ import { isServerOffline } from '@/lib/unlockStore'
 import { shouldPollNow, isRecentlyActive, isServerQuiet, setServerQuiet, subscribeServerQuiet } from '@/lib/awakeWindow'
 import { CONFIGURED_API_URL } from '@/lib/apiOrigin'
 
-// 'sleeping' is derived from the CLOCK, not detected — Railway exposes no way to
+// 'sleeping' is derived from the CLOCK, not detected — the host exposes no way to
 // ask whether a service is asleep. It means "outside working hours and no recent
 // activity, so we've stopped polling and the backend is expected to be asleep".
 // The one refinement: if the app is ACTIVELY used off-hours, real user traffic has
@@ -36,7 +36,7 @@ const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 min, só com a aba visível (deixa o
 //     dot until the next 5-min beat. That wait was the whole "DB shows OFFLINE for ages
 //     while DB features work fine" symptom.
 const DB_PROBE_TIMEOUT_MS = 15_000  // NullPool → each probe may open a fresh TLS
-                                    // connection to the Supabase pooler; 5s under-cut
+                                    // connection to the connection pooler; 5s under-cut
                                     // that and produced false OFFLINE readings.
 const HEALTH_TIMEOUT_MS = 10_000    // was 3s — a busy/cold backend that answers real
                                     // requests in 4-8s was being reported OFFLINE.
@@ -88,7 +88,7 @@ export function useBackendHealth(): BackendHealth {
     // These probes are background polls: excluded from the "real traffic" liveness
     // signal (config._backgroundPoll) so they never look like activity and perpetuate
     // themselves — otherwise the off-hours activity path below would keep re-probing
-    // and hold Railway awake.
+    // and hold the host awake.
     // 1. Backend liveness
     let backendOnline = false
     try {
@@ -190,7 +190,7 @@ export function useBackendHealth(): BackendHealth {
     }
     // Two gates, and both are load-bearing:
     //  • visible   — a backgrounded/forgotten tab that keeps hitting /api/health
-    //    resets Railway's sleep timer and keeps the backend awake 24/7 (memory
+    //    resets the host's sleep timer and keeps the backend awake 24/7 (memory
     //    billed continuously).
     //  • in-window — visibility alone does NOT cover a tab left in the
     //    FOREGROUND on a machine that never locks: that polls straight through

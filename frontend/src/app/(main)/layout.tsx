@@ -1,5 +1,4 @@
 import { ClientProviders } from '@/lib/ClientProviders'
-import { WakingServerOverlay } from '@/components/WakingServerOverlay'
 
 /**
  * Layout for all main app routes.
@@ -12,7 +11,6 @@ import { WakingServerOverlay } from '@/components/WakingServerOverlay'
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   return (
     <ClientProviders>
-      <WakingServerOverlay />
       {children}
     </ClientProviders>
   )

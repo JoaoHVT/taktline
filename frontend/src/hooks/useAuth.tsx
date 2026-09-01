@@ -1,7 +1,7 @@
 'use client'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  authLogin, authRefresh, authChangePassword, authRequestAccess, type AuthSessionUser,
+  authLogin, authRefresh, type AuthSessionUser,
 } from '@/lib/api'
 import {
   setSession, setSessionUser, restoreSession, getSessionUser, getToken, tokenExpiryMs,
@@ -38,7 +38,6 @@ export interface AuthUser {
   email:     string
   username:  string
   role?:     string
-  mustChangePassword?: boolean
 }
 
 /** Renova quando faltar menos que isto para o token expirar. */
@@ -53,7 +52,6 @@ function toAuthUser(u: SessionUser | AuthSessionUser | null): AuthUser | null {
     email: u.email || u.username,
     username: u.username,
     role: u.role,
-    mustChangePassword: !!u.mustChangePassword,
   }
 }
 
@@ -95,7 +93,6 @@ function useAuthController() {
       email: user.email,
       name: user.name,
       role: user.role,
-      mustChangePassword: !!user.mustChangePassword,
     })
     setCurrentUser(toAuthUser(user))
     setTokenReady('ok')
@@ -241,50 +238,7 @@ function useAuthController() {
     }
   }, [applySession])
 
-  // ── Solicitação de acesso ──────────────────────────────────────────────────
-  // Não autentica ninguém: enfileira o pedido para um administrador decidir. A senha
-  // escolhida aqui já é a definitiva — quando aprovada, é com ela que a pessoa entra.
-  const requestAccess = useCallback(async (payload: {
-    username: string; password: string; note?: string
-  }): Promise<{ ok: boolean; error?: string }> => {
-    try {
-      await authRequestAccess(payload)
-      return { ok: true }
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      const status = (err as { response?: { status?: number } })?.response?.status
-      if (!status) return { ok: false, error: 'Não foi possível falar com o servidor. Tente novamente.' }
-      return { ok: false, error: typeof detail === 'string' && detail ? detail : 'Não foi possível enviar a solicitação.' }
-    }
-  }, [])
-
   // ── Troca da própria senha ─────────────────────────────────────────────────
-  const changePassword = useCallback(async (
-    currentPassword: string, newPassword: string,
-  ): Promise<{ ok: boolean; error?: string }> => {
-    try {
-      const result = await authChangePassword(currentPassword, newPassword)
-      // A conta deixa de estar marcada como "senha definida por outra pessoa" no mesmo
-      // instante, sem esperar o próximo /permissions/me.
-      const stored = getSessionUser()
-      const nextUser: SessionUser = {
-        username: stored?.username ?? currentUser?.username ?? '',
-        email:    stored?.email ?? currentUser?.email ?? '',
-        name:     stored?.name ?? currentUser?.name ?? '',
-        role:     stored?.role ?? currentUser?.role,
-        mustChangePassword: false,
-      }
-      setSession(result.token, nextUser)
-      setSessionUser(nextUser)
-      setCurrentUser(toAuthUser(nextUser))
-      setTokenReady('ok')
-      return { ok: true }
-    } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      return { ok: false, error: typeof detail === 'string' && detail ? detail : 'Não foi possível alterar a senha.' }
-    }
-  }, [currentUser])
-
   // ── Logout ─────────────────────────────────────────────────────────────────
   // Puramente local: o token é auto-contido e assinado, não há sessão do lado do servidor
   // para encerrar. Apagar a cópia guardada é o que encerra a sessão neste navegador; o token
@@ -311,12 +265,8 @@ function useAuthController() {
       tokenReady,
       login,
       logout,
-      requestAccess,
-      changePassword,
       setLoginError,
-      mustChangePassword: !!currentUser?.mustChangePassword,
     }),
-    [isAuthenticated, currentUser, loginError, loggingIn, tokenReady, login, logout,
-     requestAccess, changePassword],
+    [isAuthenticated, currentUser, loginError, loggingIn, tokenReady, login, logout],
   )
 }

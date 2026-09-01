@@ -1,5 +1,5 @@
 /**
- * Assembly widget constants — mirrors WAB colour definitions from CapB3356103.py.
+ * Assembly widget constants — mirrors WAB colour definitions from the original desktop tool.
  */
 import type { ScopeKey } from '@/lib/api'
 

@@ -37,7 +37,7 @@
  * (`fwToMonth445`); the YEAR comes from the loaded período's own calendar (date_info).
  *
  * ── CLIENTE is the owning ORGANISATION, not the model ────────────────────────────────────
- * Plano de Produção's CLIENTE column is the MODELO (ES44AC, …). Imported verbatim it filled the
+ * Plano de Produção's CLIENTE column is the MODELO (MX10AC, …). Imported verbatim it filled the
  * capacity workspace's Cliente filter with locomotive models, which is not what that filter
  * means there: it groups work by the organisation that owns it, and its GCM/GCR buttons split
  * the list by a plan-side convention (client codes of up to four letters are GCM). A model name

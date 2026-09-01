@@ -1,6 +1,6 @@
 /**
  * LayoutShell — outer shell that wraps every page.
- * Structure mirrors the MainWindow layout from CapB3356103.py:
+ * Structure mirrors the MainWindow layout from the original desktop tool:
  *
  *   ┌─────────────────────────────────────┐
  *   │  AppHeader (gray toolbar + logo)    │  fixed top

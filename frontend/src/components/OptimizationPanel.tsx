@@ -96,11 +96,11 @@ export function OptimizationPanel({ excelData }: Props) {
 
         <span className="font-medium text-gray-700">{excelData.wsn_list.length} WSNs</span>
 
-        <span>Â·</span>
+        <span>·</span>
 
         <span>{excelData.total_demand_h.toLocaleString('pt-BR', { maximumFractionDigits: 0 })} h demanda total</span>
 
-        <span>Â·</span>
+        <span>·</span>
 
         <span>{new Set(Object.values(excelData.people_by_wsn).flat()).size} pessoas</span>
 
@@ -112,7 +112,7 @@ export function OptimizationPanel({ excelData }: Props) {
 
       <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
 
-        <p className="text-sm font-medium text-gray-700">ParÃ¢metros da otimizaÃ§Ã£o</p>
+        <p className="text-sm font-medium text-gray-700">Parâmetros da otimização</p>
 
 
 
@@ -250,7 +250,7 @@ export function OptimizationPanel({ excelData }: Props) {
 
             <Play size={15} />
 
-            {isRunning ? 'Otimizando...' : 'Iniciar otimizaÃ§Ã£o'}
+            {isRunning ? 'Otimizando...' : 'Iniciar otimização'}
 
           </button>
 
@@ -382,7 +382,7 @@ export function OptimizationPanel({ excelData }: Props) {
 
           <div className="bg-white rounded-xl border border-gray-200 p-5">
 
-            <p className="text-sm font-medium text-gray-700 mb-3">AlocaÃ§Ã£o por WSN</p>
+            <p className="text-sm font-medium text-gray-700 mb-3">Alocação por WSN</p>
 
             <WsnTable wsns={wsns} />
 

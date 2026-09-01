@@ -1,5 +1,5 @@
 /**
- * AppFooter — replicates the red KPI status bar from CapB3356103.py MainWindow.
+ * AppFooter — replicates the red KPI status bar from the original desktop tool MainWindow.
  * Background: WAB_RED (#D32F2F), white text, height ~56px.
  *
  * Mode (Skill / Headcount) is driven by the header’s Headcount dropdown

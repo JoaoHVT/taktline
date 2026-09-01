@@ -3,7 +3,7 @@ services/assembly_details.py
 -----------------------------
 Per-scope breakdown for a list of items.
 
-Two-step architecture (mirrors CapB3356103.py AssemblyWidget):
+Two-step architecture (mirrors the legacy desktop tool AssemblyWidget):
   1. Demand qty  → ITEM column rows, filtered by period (mes/FW)
   2. Hours & WSN → ASSEMBLY column rows (full dataset, all periods)
      mirroring build_widget_rows() which groups by COMPONENT and uses
@@ -26,11 +26,14 @@ import pandas as pd
 
 from services.data_loader import _normalize, _safe_float, _find_col, _fw_key, _build_assembly_desc_map
 
-# ── Scope constants (mirror WAB colour order from CapB3356103.py) ─────────────
+#: Where a scope-percentage override file (allocations.json) may live, if one is provided.
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+
+# ── Scope constants (mirror the scope colour order of the legacy desktop tool) ─────────────
 
 SCOPE_ORDER: list[str] = ["LEVE", "MEDIO", "PESADO", "UNICO"]
 
-# Mirrors escolher_escopo() fallback chain in CapB3356103.py
+# Mirrors escolher_escopo() fallback chain in the legacy desktop tool
 _SCOPE_FALLBACK: dict[str, list[str]] = {
     "LEVE":   ["LEVE"],
     "MEDIO":  ["MEDIO", "LEVE"],
@@ -42,7 +45,7 @@ _SCOPE_FALLBACK: dict[str, list[str]] = {
 def _normalize_tipo_fw(value: object) -> str:
     """
     Normalise a TIPO / TIPO FW value to a canonical string.
-    Mirrors CapB3356103.py _normalize_tipo_fw_value().
+    Mirrors the legacy desktop tool _normalize_tipo_fw_value().
     """
     txt = _normalize(str(value or "").strip())
     if not txt:
@@ -127,7 +130,7 @@ def _build_tipo_fw_qty_map(
     """
     Build {tipo_norm → total_qty} from period-filtered ITEM demand rows.
 
-    Mirrors CapB3356103.py _build_tipo_fw_qty_map_for_group():
+    Mirrors the legacy desktop tool _build_tipo_fw_qty_map_for_group():
       - per FW per TIPO: take max QTDE FW  (deduplicate repeated operation rows)
       - sum across FWs
 
@@ -166,7 +169,7 @@ def _build_locus_map(df: "pd.DataFrame") -> dict[tuple[str, str], float]:
     """
     Build {(assembly_norm, component_norm): qty_locos} from the spreadsheet.
 
-    Mirrors MainWindow._build_locus_map() in CapB3356103.py.
+    Mirrors MainWindow._build_locus_map() in the legacy desktop tool.
     Used to multiply hours for items whose family is "NEW LOCOS".
     Reads columns: LOCUS (assembly code), COMP1 (component code), QTDE LOCUS (qty).
     """
@@ -196,7 +199,7 @@ def _build_locus_map(df: "pd.DataFrame") -> dict[tuple[str, str], float]:
 def _build_family_map(df: "pd.DataFrame") -> dict[str, str]:
     """
     Build {item_norm: familia_label} from the spreadsheet ITEM + FAMILIA columns.
-    Mirrors MainWindow._build_family_map() in CapB3356103.py.
+    Mirrors MainWindow._build_family_map() in the legacy desktop tool.
     """
     fam_map: dict[str, str] = {}
     col_item = _find_col(df, ["ITEM"])
@@ -234,7 +237,7 @@ def _detect_scopes_present(scopes_found: list[str]) -> list[str]:
 
 def _escolher_escopo_python(df_comp: pd.DataFrame, scope: str) -> pd.DataFrame:
     """
-    Python port of escolher_escopo() from CapB3356103.py.
+    Python port of escolher_escopo() from the legacy desktop tool.
 
     For the requested scope, tries the scope fallback chain and returns
     the matching rows, always appending UNICO rows (if any) unless the
@@ -317,7 +320,7 @@ def _process_item_from_assembly(
     """
     Compute hours from ASSEMBLY lookup rows × scope_qty.
 
-    Mirrors build_widget_rows() from CapB3356103.py:
+    Mirrors build_widget_rows() from the legacy desktop tool:
       - Group df_asm by COMPONENT
       - For each scope, use _escolher_escopo_python() to pick the relevant rows
       - total_h = scope_qty × sum(HH per operation row)
@@ -328,12 +331,12 @@ def _process_item_from_assembly(
 
     When tipo_filter is set (non-empty, not "TODOS"), assembly operation rows are
     pre-filtered to only those whose TIPO matches tipo_filter.  This mirrors
-    filter_operations_by_tipo_fw() in CapB3356103.py — if no rows match the
+    filter_operations_by_tipo_fw() in the legacy desktop tool — if no rows match the
     filter, the result is an empty operations list (not a fallback to all rows).
     """
     # ── Pre-filter assembly rows by tipo ───────────────────────────────────────
     # Priority: explicit UI tipo_filter > item's own tipo_fw list > no filter.
-    # Mirrors filter_operations_by_tipo_fw() in CapB: when a filter is active,
+    # Mirrors filter_operations_by_tipo_fw() in the legacy tool: when a filter is active,
     # rows that don't match return zero hours (no fallback to all rows).
     tipo_filter_norm = _normalize_tipo_fw(tipo_filter) if tipo_filter else ""
     if tipo_filter_norm == "TODOS":
@@ -514,7 +517,7 @@ def _process_item_from_assembly(
             for _, row in df_sel.iterrows():
                 hh = _safe_float(row.get(col_hh) if col_hh else 0.0)
 
-                # NEW LOCOS: apply per-component locus multiplier (mirrors CapB3356103.py)
+                # NEW LOCOS: apply per-component locus multiplier (mirrors the legacy desktop tool)
                 locus_mult = 1.0
                 if locus_map is not None and item_norm:
                     comp_key_norm = _normalize(str(_comp_key)) if _comp_key != "_all_" else ""
@@ -638,7 +641,7 @@ def _process_item_from_assembly(
                     if pd.notna(v):
                         op_desc = str(v).strip()
 
-                # Operation description from DESC column (same column CapB shows as WS tooltip and standalone)
+                # Operation description from DESC column (same column the legacy tool shows as WS tooltip and standalone)
                 row_op_desc = ""
                 if col_op_desc and col_op_desc in df_sel.columns:
                     v = row.get(col_op_desc)
@@ -740,7 +743,7 @@ def _distribute_qty(
     """
     Distribute total qty across scopes using allocation percentages.
     Uses the largest-remainder (Hamilton) method to ensure integer totals sum
-    correctly — mirrors CapB3356103.py build_widget_rows allocation logic.
+    correctly — mirrors the legacy desktop tool build_widget_rows allocation logic.
     """
     if not scopes:
         return {}
@@ -1064,20 +1067,19 @@ def _explicit_tipo_scope_map(
 
 
 def get_assembly_details(
-    filepath: str | Path,
+    df_full: "pd.DataFrame",
     *,
     items: list[str],
     mes:   int | None = None,
     fws:   list[str] | None = None,
     mode:  str = "mensal",
     tipo_filter: str = "",
-    df_override: "pd.DataFrame | None" = None,
     demand_override: "dict[str, dict] | None" = None,
 ) -> dict:
     """
     Returns per-scope breakdown for a list of items.
 
-    Architecture (two-step, mirrors CapB3356103.py AssemblyWidget):
+    Architecture (two-step):
       Step 1 – Demand qty:
         Filter ITEM column by period → aggregate QTDE_FW per scope.
         Apply allocations.json to redistribute qty across scopes.
@@ -1108,27 +1110,7 @@ def get_assembly_details(
         }
       }
     """
-    filepath = Path(filepath)
-    if not filepath.exists() and df_override is None:
-        return {"status": "error", "message": f"Arquivo não encontrado: {filepath}"}
-
-    alloc_map = _load_allocations(filepath.parent)
-
-    if df_override is not None:
-        df_full = df_override
-    else:
-        try:
-            xl = pd.ExcelFile(filepath)
-        except Exception as exc:
-            return {"status": "error", "message": f"Falha ao abrir Excel: {exc}"}
-
-        if "Discretizado" not in xl.sheet_names:
-            return {"status": "error", "message": "Aba 'Discretizado' não encontrada."}
-
-        try:
-            df_full = xl.parse("Discretizado")
-        except Exception as exc:
-            return {"status": "error", "message": f"Erro ao ler aba 'Discretizado': {exc}"}
+    alloc_map = _load_allocations(_BACKEND_DIR)
 
     def fc(*candidates: str) -> str | None:
         return _find_col(df_full, list(candidates))
@@ -1381,7 +1363,7 @@ def get_assembly_details(
 
         if not df_item_asm.empty:
             # ── Mirror original _detect_scopes_present() ─────────────────
-            # The original CapB uses ASSEMBLY data (full dataset, no period
+            # The original the legacy tool uses ASSEMBLY data (full dataset, no period
             # filter) to determine which scopes an item supports, NOT the
             # demand rows.  Using demand rows caused items whose demand plan
             # labels them "PESADO" to override a true "UNICO" assembly scope.

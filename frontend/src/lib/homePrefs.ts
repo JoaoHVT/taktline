@@ -4,7 +4,7 @@
 // `useSyncExternalStore` can read it — that is what keeps the value out of an effect and
 // still gives the server a stable `false` to prerender.
 
-const SHOWCASE_KEY = 'optvision.home.showcase'
+const SHOWCASE_KEY = 'taktline.home.showcase'
 
 const listeners = new Set<() => void>()
 

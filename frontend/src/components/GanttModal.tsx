@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback, useTransition } from 'react'
 import { X, ChevronLeft, ChevronRight, ChevronDown, Loader2, RefreshCw, Save, RotateCcw, Lock, History } from 'lucide-react'
 import { ConfirmDialog } from './ConfirmDialog'
-import { getGanttData, exportGanttView, optimizeGanttConflictsStreaming, swapWs } from '@/lib/api'
+import { getGanttData } from '@/lib/api'
 import type { GanttData, LocoEdit, OptScopeFilter } from '@/lib/api'
 import { triggerUnlock } from '@/lib/unlockStore'
 import {
@@ -583,8 +583,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   const [editPanel,   setEditPanel]   = useState<EditTarget | null>(null)
   // "Adicionar Workstation" dialog — open against a LOCO-scope target (which LOCO gets the new station).
   const [addWsPanel,  setAddWsPanel]  = useState<EditTarget | null>(null)
-  // Transient message for a manual-swap that couldn't run (not ES44 / interleaved WS / no WS pair).
-  const [swapNotice,  setSwapNotice]  = useState<string | null>(null)
+  // Transient message for a manual-swap that couldn't run (not MX10 / interleaved WS / no WS pair).
   // Imperative handle into the Schedule's GanttTable for single-LOCO visual patches.
   const ganttTableRef = useRef<GanttTableHandle>(null)
 
@@ -2144,26 +2143,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     return Object.keys(ov.desc).filter(k => k.startsWith(prefix))
   }
 
-  // ── Manual WS40↔WS50 swap ("Trocar Workstation") ──────────────────────────────────────────────
-  // ES44-only, offered on a right-clicked WS40/WS50 box. The reorder itself is computed SERVER-SIDE by
-  // the conflict optimizer's OWN rules (POST /api/gantt/swap-ws → _is_es44 + _swap_ws_layout) — there is
-  // exactly one swap implementation. The result is stored as ordinary WS-scope start/finish day-shifts —
-  // the SAME shape bakeGanttDiffToOverrides emits for an optimizer swap — so it persists, compares, feeds
-  // Production-Planning impacts, and renders (indicators included) like any other manual override.
-  const _wsNorm4050 = (ws: string): string => String(ws || '').trim().toUpperCase().replace(/\s+/g, '')
-  // Mirrors the backend _is_es44 detector (ES44 tolerant of spacing/separators); the backend stays
-  // authoritative — this only gates whether the menu item appears. Avoids look-behind for browser reach.
-  const _ES44_RE = /(^|[^A-Za-z0-9])ES[\s\-_./]*44(?![0-9])/i
-
-  // Menu-visibility gate: ES44 model + the clicked box is WS40/WS50. The definitive swappability
-  // (the clean-block rule) is validated on click by the backend, which shows a notice if it can't.
-  function canSwapWs(t: EditTarget): boolean {
-    if (t.scope === 'loco') return false
-    const n = _wsNorm4050(t.ws ?? '')
-    if (n !== 'WS40' && n !== 'WS50') return false
-    return _ES44_RE.test(`${t.wo} ${t.taskName} ${t.linha}`)
-  }
-
   // How many component rows the clicked row's workstation carries — counted by ws key across ALL its
   // sub-área entries (the ws edit-scope is the ws alone). Drives the FULL-mode single-component menu
   // simplification: a WS with exactly one component makes "Editar Workstation" redundant with
@@ -2180,6 +2159,8 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
    *  therefore treated as multi-component and denied direct hours editing, even though the user sees a
    *  single entity — the reported bug. descEditKeyOf is the authority on Componente identity, so the
    *  count has to agree with it or the two disagree about what a component is. */
+  const _wsNorm4050 = (ws: string): string => String(ws || '').trim().toUpperCase().replace(/\s+/g, '')
+
   function wsComponentsOf(t: EditTarget): { ws: string; subarea: string; desc: string }[] {
     const key = locoKeyForTarget(t)
     const g = (dataRef.current?.groups ?? []).find(gr => locoKeyOf(gr) === key)
@@ -2317,222 +2298,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     setEditMenu(null)
   }
 
-  async function swapWorkstationFromMenu() {
-    const t = editMenu?.target
-    setEditMenu(null)
-    if (!t || !canSwapWs(t)) return
-    const key = locoKeyForTarget(t)
-
-    // TOGGLE. A swap is a reversible exchange, so a second invocation UN-swaps — and it runs through
-    // the SAME machinery as the first one: exchange the two stations WHERE THEY ARE NOW, then clear
-    // the markers. One direction, one implementation.
-    //
-    // It is not enough to subtract the recorded `swapShift`, which is what this did. That inverse is
-    // exact only while nothing has moved the pair since the trade, and the swapped stations are
-    // routinely moved by a CASCADE they do not store: after the trade WS50 sits first, so propagating
-    // a shift from it pushes WS40 — which keeps that displacement as inherited geometry, not as its
-    // own `startShiftDays`. Subtracting the trade then sends WS40 back to base, i.e. to its
-    // pre-swap AND pre-shift slot, while its partner and everything downstream keep the shift. That
-    // is the reported "swap → shift+propagate → swap back reverts the first WS to the original
-    // reference", and it opens a hole where the station used to be.
-    //
-    // Exchanging the CURRENT effective positions has neither problem: the effective layout already
-    // contains every cascade, so the delta it yields is measured from where the station really is.
-    // With nothing touched since the swap the two deltas are the exact inverse of the original trade
-    // and the pair lands on base with empty overrides, exactly as before.
-    //
-    // Read the COMPOSED map, never the raw write layer. `startShiftDays` is absolute-from-base and the
-    // composition is a per-object REPLACE, so in Projeção a station whose shift lives in the Standard
-    // layer has NO entry here yet — reading `writeOverrides` returned 0 for it, the swap then wrote
-    // `0 + delta` into the projection layer, and that entry MASKED the Standard shift: the station
-    // jumped back by exactly its pre-swap displacement ("a swap can reset offsets / restore old
-    // references"). Every other read path (scopedEditOf, origShiftOf) already composes; this one didn't.
-    // The swap markers are read the same way, so a station swapped in Standard is still detected as
-    // swapped in Projeção and the menu un-swaps instead of swapping it a second time.
-    const curOv = activeOverrides[key]
-    const sw40 = curOv?.ws?.[wsEditKeyOf('WS40')], sw50 = curOv?.ws?.[wsEditKeyOf('WS50')]
-    const isUnswap = !!(sw40?.swap || sw50?.swap)
-    // Un-swapping must never be IMPOSSIBLE. Every way the live exchange can decline — Schedule not
-    // ready, the backend refusing an interleaved pair, the LOCO missing from the effective build —
-    // falls back to the old arithmetic inverse (subtract the recorded `swapShift`, drop the markers),
-    // which always terminates. On the forward direction there is nothing to fall back to, so those
-    // same failures stay a notice.
-    const failSwap = (msg: string) => {
-      if (isUnswap) applyScopedEdits([unswapItem(t, 'WS40', sw40), unswapItem(t, 'WS50', sw50)], true)
-      else setSwapNotice(msg)
-    }
-
-    // The trade must exchange the stations where they ACTUALLY ARE, not where the original schedule
-    // put them: computing from base data meant an edit made before the swap was silently discarded
-    // (the swap then REPLACED the station's shift), which is the "swap reverts my edits" report. The
-    // effective schedule is the worker's own merge of base ⊕ overrides, so it also accounts for
-    // positions the stations inherited from an upstream cascade — something re-deriving the shift
-    // arithmetic here could not do.
-    const handle = ganttTableRef.current
-    const baseData = dataRef.current
-    if (!handle || !baseData) { failSwap('Schedule não está pronto para a troca.'); return }
-    let effective: GanttData
-    try { effective = await handle.computeEffective(baseData, activeOverrides) }
-    catch { failSwap('Falha ao calcular a troca.'); return }
-
-    const g = (effective.groups ?? []).find(gr => locoKeyOf(gr) === key)
-    if (!g) { failSwap('LOCO não encontrada para a troca.'); return }
-    // Union of each WS's day-cell ISOs (WS40/WS50 may span several sub-área rows).
-    const daysOf = (wsN: string): string[] => {
-      const out = new Set<string>()
-      for (const w of g.workstations) {
-        if (_wsNorm4050(w.ws) !== wsN) continue
-        for (const dr of w.desc_rows) for (const iso of Object.keys(dr.cells)) out.add(iso)
-      }
-      return [...out].sort()
-    }
-    const ws40 = daysOf('WS40'), ws50 = daysOf('WS50')
-    if (!ws40.length || !ws50.length) { failSwap('Esta LOCO não tem WS40 e WS50 para trocar.'); return }
-
-    let res
-    try {
-      res = await swapWs({ wo: t.wo, taskName: t.taskName, linha: t.linha, ws40Days: ws40, ws50Days: ws50 })
-    } catch (e) {
-      failSwap(e instanceof Error ? e.message : 'Falha ao calcular a troca.')
-      return
-    }
-    if (!res.ok) {
-      failSwap(
-        res.reason === 'interleaved' ? 'Não é possível trocar: WS40 e WS50 estão interligadas (sem ordem limpa para inverter).'
-        : res.reason === 'not_es44'  ? 'Troca disponível apenas para modelos ES44.'
-        : 'Não é possível trocar estas workstations.',
-      )
-      return
-    }
-
-    // Express the reorder as a PURE RIGID position exchange: each WS moves as a whole to the other's
-    // slot, keeping its own duration. In override terms that is startShiftDays = the START's business-day
-    // delta and finishShiftDays = the DURATION change (NOT the absolute finish delta): the worker computes
-    // newFinish = oldFinish + startShift + finishShift (finishShiftDays is added to the row duration at
-    // applyWsEdits, line ~2425), and Move Mode confirms a rigid move leaves finishShiftDays = 0. A swap
-    // preserves each WS's day-count, so finishShiftDays here is always 0 — computed as (finishΔ − startΔ)
-    // so it stays exactly rigid even across a shared half-day boundary. Nothing stretches, no duration is
-    // recalculated, and both WS stay inside the block's original span → nothing downstream moves.
-    //
-    // The deltas below are relative to the stations' CURRENT (effective) positions, so they are the
-    // swap's OWN contribution — which is exactly what `swapShift` has to record, and what gets ADDED to
-    // whatever shift the station already carried. The swap no longer replaces a prior edit; every other
-    // scope is untouched as before. The business-day axis matches bakeGanttDiffToOverrides (registered
-    // working Saturdays are already is_weekend=false on date_info, so they join the axis).
-    const axis = (dataRef.current?.date_info ?? []).filter(d => !d.is_weekend && !d.is_holiday).map(d => d.iso).sort()
-    const idxAtOrBefore = (iso: string): number => {
-      let lo = 0, hi = axis.length - 1, ans = 0
-      while (lo <= hi) { const m = (lo + hi) >> 1; if (axis[m] <= iso) { ans = m; lo = m + 1 } else hi = m - 1 }
-      return ans
-    }
-    // start = the whole-WS position shift; finish = the DURATION change (finish delta relative to the
-    // start move). Rigid ⇒ finish === 0; kept as a difference to survive shared-boundary day counts.
-    const shiftFor = (baseIsos: string[], newIsos: string[]) => {
-      const b = baseIsos.slice().sort(), n = newIsos.slice().sort()
-      const startDelta  = idxAtOrBefore(n[0]) - idxAtOrBefore(b[0])
-      const finishDelta = idxAtOrBefore(n[n.length - 1]) - idxAtOrBefore(b[b.length - 1])
-      return { start: startDelta, finish: finishDelta - startDelta }
-    }
-    const s40 = shiftFor(ws40, res.ws40_days ?? [])
-    const s50 = shiftFor(ws50, res.ws50_days ?? [])
-
-    // Audit note (category "Manual Swap") on the clicked WS scope — the SAME move-note trail every other
-    // override uses (corner badge + hover history), stamping the user + timestamp automatically.
-    const noteWs = _wsNorm4050(t.ws ?? '') === 'WS50' ? 'WS50' : 'WS40'
-    const existingNotes = (scopedEditOf({ ...t, scope: 'ws', ws: noteWs }) as ScopedEdit | undefined)?.notes
-    const notes = applyMoveNote(existingNotes,
-      isUnswap ? 'Desfeita a troca WS40 ↔ WS50' : 'Troca WS40 ↔ WS50',
-      username, 'append', MANUAL_SWAP_CATEGORY)
-
-    // COMPOSE with whatever each station already carried, instead of overwriting it. `startShiftDays`
-    // is absolute (measured from base), and the deltas above are measured from the CURRENT position, so
-    // the new absolute shift is simply the old one plus the delta. This is what makes edit→swap
-    // cumulative: an edit made before the swap survives it, exactly as an edit made after one does.
-    //
-    // swap:true marks BOTH WS as a pure position TRADE, and swapShift records how much of the resulting
-    // shift the trade itself accounts for — the worker measures delays against base ⊕ swapShift, so the
-    // trade hatches nothing while any later move on these stations is reported normally
-    // (_swapRefOverride in gantt-table-worker.js).
-    //
-    // UN-SWAPPING clears both markers instead of writing them (`swap: false` is the explicit CLEAR —
-    // `undefined` would inherit; `swapShift: null` likewise). The stations are back in their natural
-    // order, so whatever shift is left on them is an ordinary move and must be measured and hatched
-    // as one. The deltas are still ADDED, never assigned: everything the pair accumulated between the
-    // two invocations is preserved by construction.
-    const compose = (wsKey: 'WS40' | 'WS50', d: { start: number; finish: number }): ScopedEditItem => {
-      const prev = curOv?.ws?.[wsEditKeyOf(wsKey)]
-      // PROPAGATION TRAVELS WITH THE SLOT, so the two flags trade places along with the stations.
-      // A swap decides nothing about propagation — but it does decide WHICH station occupies the
-      // late slot, and "push what follows me" is a fact about that position, not about the label on
-      // it. Left with its original station, the exchange silently cancelled a cascade: the late
-      // station moved to the front (publishing nothing) while the one that took its place carried no
-      // flag, so downstream sprang back and overlapped the pair — even though a slot exchange keeps
-      // the block's span and must leave everything outside it exactly where it was.
-      const partner = curOv?.ws?.[wsEditKeyOf(wsKey === 'WS40' ? 'WS50' : 'WS40')]
-      return {
-        target: { ...t, scope: 'ws', ws: wsKey },
-        takt: prev?.takt ?? null,
-        startShift: (prev?.startShiftDays ?? 0) + d.start,
-        finishShift: (prev?.finishShiftDays ?? 0) + d.finish,
-        propagate: !!partner?.propagate,
-        swap: !isUnswap,
-        swapShift: isUnswap ? null : d,
-        notes: noteWs === wsKey ? notes : undefined,
-        hoursTotal: prev?.hoursTotal ?? null,
-      }
-    }
-    // ── LAND ON THE TARGET SLOTS, not on the arithmetic ───────────────────────────────────────────
-    // The deltas above are measured in EFFECTIVE space and written into STORED space, and those two
-    // are not the same thing whenever part of a station's position is an INHERITED CASCADE rather
-    // than its own shift. The exchange changes the pair's sequence, so it can change what each of
-    // them inherits — and the difference lands as a silent displacement.
-    //
-    // The reported case: swap, then shift the (now leading) WS50 with propagation. WS40 is dragged
-    // along by that cascade and stores nothing of it. Swapping back puts WS40 in front again, where
-    // WS50's cascade can no longer reach it, so it drops the whole shift and snaps to its original
-    // base slot while its partner and everything downstream keep it — a station "reverting to the
-    // pre-shift reference", with a hole where it used to be.
-    //
-    // So: ASK. `res.ws40_days` / `res.ws50_days` are the exact slots the exchange must produce, and
-    // the worker is the only thing that knows what a given override map really renders as. Build the
-    // edit, compute what it would look like, and correct each station by whatever it came out short.
-    // Costs one extra `computeEffective` in the common case (no cascade involved → error 0, done) and
-    // at most two more; the loop is bounded and simply commits what it has if it cannot converge.
-    const targetIdx: Record<'WS40' | 'WS50', number | null> = {
-      WS40: (res.ws40_days ?? []).length ? idxAtOrBefore((res.ws40_days ?? []).slice().sort()[0]) : null,
-      WS50: (res.ws50_days ?? []).length ? idxAtOrBefore((res.ws50_days ?? []).slice().sort()[0]) : null,
-    }
-    /** First occupied business-day index of a workstation in a computed schedule. */
-    const startIdxOf = (data: GanttData, wsN: 'WS40' | 'WS50'): number | null => {
-      const gr = (data.groups ?? []).find(x => locoKeyOf(x) === key)
-      if (!gr) return null
-      let lo: string | null = null
-      for (const w of gr.workstations) {
-        if (_wsNorm4050(w.ws) !== wsN) continue
-        for (const dr of w.desc_rows) for (const d2 of Object.keys(dr.cells)) if (!lo || d2 < lo) lo = d2
-      }
-      return lo ? idxAtOrBefore(lo) : null
-    }
-    let items: ScopedEditItem[] = [compose('WS40', s40), compose('WS50', s50)]
-    for (let pass = 0; pass < 3; pass++) {
-      // Measured on the COMPOSED map — that is what the iframe renders — while the commit below
-      // still writes through the normal (write-layer) path.
-      let trial: GanttData
-      try { trial = await handle.computeEffective(baseData, nextOverrideMap(activeOverrides, items)) }
-      catch { break }
-      const err: Record<'WS40' | 'WS50', number> = { WS40: 0, WS50: 0 }
-      for (const wsN of ['WS40', 'WS50'] as const) {
-        const got = startIdxOf(trial, wsN), want = targetIdx[wsN]
-        if (got != null && want != null) err[wsN] = want - got
-      }
-      if (!err.WS40 && !err.WS50) break
-      items = items.map(it => {
-        const wsN = (it.target.ws === 'WS50' ? 'WS50' : 'WS40') as 'WS40' | 'WS50'
-        return err[wsN] ? { ...it, startShift: (it.startShift ?? 0) + err[wsN] } : it
-      })
-    }
-    applyScopedEdits(items, true)
-  }
 
   /** FALLBACK inverse of a swap, for the cases where the live exchange cannot run (Schedule not
    *  ready, the backend refusing an interleaved pair — see `failSwap`). The normal path un-swaps by
@@ -2834,69 +2599,10 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     ganttTableRef.current?.patchLocos(patch)        // repaint only the reverted LOCOs (Schedule iframe)
   }
 
-  async function handleOptimizeMode(mode: 1 | 2 | 3, mode1Opts?: Mode1Options) {
-    if (mode === 1) {
-      setOptLoading(true)
-      setOptError(null)
-      setOptLogs([])
-      setOptProgress(0)
-      setOptMessage('')
-      setOptStatus('running')
-      setShowOptTerminal(true)
-      try {
-        // Collect the EXACT scope the user sees so the backend evaluates
-        // conflicts on the same dataset (visible LOCOs + visible date window),
-        // not the full DB schedule. Prevents phantom conflicts and date-out-of-view
-        // conflicts from being reported/optimized.
-        const groups = effectiveDataRef.current?.groups ?? []
-        const activeWos  = Array.from(new Set(groups.map(g => g.wo).filter(Boolean))) as string[]
-        const locoKeys   = Array.from(new Set(
-          groups.map(g => `${g.wo}||${g.task_name}`).filter(k => !k.startsWith('||'))
-        ))
-        const ddToISO = (s?: string) => {
-          if (!s) return undefined
-          const [dd, mm, yyyy] = s.split('/')
-          return yyyy && mm && dd ? `${yyyy}-${mm.padStart(2, '0')}-${dd.padStart(2, '0')}` : undefined
-        }
-        // The EXACT solver scope — captured so a reload can re-run the deterministic optimizer and
-        // rebuild the identical baseline. `locoEdits` here is the PRE-optimize baseline (whatever
-        // edits existed when Optimize ran); post-optimize edits live in the override layer.
-        const optScope: OptScopeFilter = {
-          lineFilter: activeWos,
-          locoKeys,
-          dateFrom: ddToISO(dateRange?.from?.trim()),
-          dateTo:   ddToISO(dateRange?.to?.trim()),
-          strategy:     mode1Opts?.strategy ?? 'shift_full',
-          useSaturdays: mode1Opts?.useSaturdays ?? false,
-          allowOverlap: mode1Opts?.allowOverlap ?? false,
-          // Manual LOCO edits become the new baseline: the optimizer runs on the edited schedule.
-          locoEdits:    overridesToLocoEdits(),
-        }
-        const result = await optimizeGanttConflictsStreaming((evt) => {
-          if (evt.type === 'log' && evt.msg) {
-            setOptLogs(prev => [...prev, evt.msg!])
-            if (evt.progress != null) setOptProgress(evt.progress)
-            if (evt.message)         setOptMessage(evt.message)
-          }
-        }, optScope)
-        originalDataRef.current = originalDataRef.current ?? data
-        setOptStatus('done')
-        setOptProgress(100)
-        // Set optimized data synchronously so effectiveData switches immediately.
-        // Only setTableBuilt is deferred (it triggers a heavy worker rebuild).
-        setOptimizedData(result)
-        setActiveOptMode(1)
-        startTransition(() => { setTableBuilt(false) })
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : 'Erro ao otimizar.'
-        setOptError(msg)
-        setOptStatus('error')
-      } finally {
-        setOptLoading(false)
-      }
-    } else {
-      setActiveOptMode(mode)
-    }
+  // The Schedule's conflict optimizer was removed with its endpoint; the mode selector now only
+  // switches between the views that are computed in the browser.
+  function handleOptimizeMode(mode: 1 | 2 | 3) {
+    setActiveOptMode(mode)
   }
 
   // Focus tab scroll containers
@@ -3879,31 +3585,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
     if (ganttBuiltRef.current) onScheduleReady?.()
   }, [preloadSchedule, visible]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleExport() {
-    if (!effectiveData) { alert('Carregue a aba Schedule antes de exportar.'); return }
-    setExporting(true)
-    try {
-      // Export the EXACT on-screen data + active view so the Excel matches the
-      // Schedule 1:1 (mode grouping, optimization/scenario shifts, Saturday boxes),
-      // with all UI-only overlays excluded by the renderer. Large datasets may take a
-      // few seconds — the export button shows the spinner via `exporting`.
-      // The backend export API has no notion of per-row expansion, so the tree maps to the
-      // three modes it knows: every LOCO collapsed → 'loco' (one row per LOCO); LOCOs open
-      // but every workstation collapsed → 'ws' (one row per workstation); anything expanded
-      // or mixed → 'full'.
-      const exportMode: 'full' | 'ws' | 'loco' =
-        locoExpandSummary === 'none' ? 'loco' : (wsExpandSummary === 'none' ? 'ws' : 'full')
-      const bytes = await exportGanttView(effectiveData, exportMode, true)
-      const fileName = data?.scenario_id ? 'gantt_cenario.xlsx' : 'gantt_output.xlsx'
-      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
-      const a = document.createElement('a'); a.href = url; a.download = fileName; a.click()
-      URL.revokeObjectURL(url)
-    } catch (e: unknown) {
-      alert(e instanceof Error ? e.message : 'Falha ao exportar.')
-    } finally {
-      setExporting(false)
-    }
-  }
 
   // Export levels per Summary mode. The hierarchy MUST mirror the on-screen table:
   //   Area mode  → Área → Subárea → Itens   (area | subarea | itens)
@@ -4690,7 +4371,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
           showExportMenu={showExportMenu}
           setShowExportMenu={setShowExportMenu}
           exportMenuRef={exportMenuRef}
-          handleExport={handleExport}
           handleExportSummary={handleExportSummary}
           summaryRowMode={rowMode}
           onClose={onClose}
@@ -4756,17 +4436,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
             setOptError('Otimização cancelada pelo usuário.')
           }}
           onClose={() => setShowOptTerminal(false)}
-        />
-      )}
-
-      {/* Modo 1 — strategy + Saturdays options dialog */}
-      {showMode1Options && (
-        <Mode1OptionsModal
-          onCancel={() => setShowMode1Options(false)}
-          onConfirm={(opts) => {
-            setShowMode1Options(false)
-            handleOptimizeMode(1, opts)
-          }}
         />
       )}
 
@@ -4920,10 +4589,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                     ...(hasWorkstationScope(editMenu.target)
                       ? [{ label: 'Resetar Workstation', icon: <RotateCcw size={13} />, danger: true, onClick: () => resetWorkstationFromMenu(editMenu.target) }]
                       : []),
-                    // Below "Editar Workstation" — ES44 WS40/WS50 only (see canSwapWs).
-                    ...(canSwapWs(editMenu.target)
-                      ? [{ label: 'Trocar Workstation', icon: <ArrowLeftRight size={13} />, onClick: () => swapWorkstationFromMenu() }]
-                      : []),
                     // A manually-added station can be removed entirely (drops it + any edits on it).
                     ...(isAddedWs(editMenu.target)
                       ? [{ label: 'Remover Workstation', icon: <Trash2 size={13} />, danger: true, onClick: () => removeAddedWorkstation(editMenu.target) }]
@@ -4951,10 +4616,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                               : []),
                           ]
                         : []),
-                      // ES44 WS40/WS50 only. The swap always acts at the LOCO's WS40/WS50 level.
-                      ...(canSwapWs(t)
-                        ? [{ label: 'Trocar Workstation', icon: <ArrowLeftRight size={13} />, onClick: () => swapWorkstationFromMenu() }]
-                        : []),
                       // A manually-added station can be removed entirely (drops it + any edits on it).
                       ...(isAddedWs(t)
                         ? [{ label: 'Remover Workstation', icon: <Trash2 size={13} />, danger: true, onClick: () => removeAddedWorkstation(t) }]
@@ -4977,28 +4638,6 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
               : { label: `Marcar sábado como dia útil (${satMenu.iso.slice(8, 10)}/${satMenu.iso.slice(5, 7)})`, icon: <CalendarPlus size={13} />, onClick: () => toggleSaturdayWorkday(satMenu.iso) },
           ]}
         />
-      )}
-
-      {/* "Trocar Workstation" couldn't run (not ES44 / WS40↔WS50 interleaved / missing WS pair).
-          Small dismissible alert, matching the working-Saturday refusal dialog above. */}
-      {swapNotice && (
-        <div className="fixed inset-0 z-[10001] flex items-center justify-center bg-black/40 p-4"
-             onMouseDown={() => setSwapNotice(null)}>
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col"
-               onMouseDown={e => e.stopPropagation()}>
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-200">
-              <AlertTriangle size={16} className="shrink-0" style={{ color: '#F59E0B' }} />
-              <h3 className="text-sm font-bold text-gray-800">Trocar Workstation</h3>
-            </div>
-            <div className="px-4 py-3 text-sm text-gray-700">{swapNotice}</div>
-            <div className="px-4 py-3 border-t border-gray-200 flex justify-end">
-              <button onClick={() => setSwapNotice(null)}
-                      className="px-3 py-1.5 rounded text-sm font-semibold text-white bg-red-600 hover:bg-red-700">
-                OK
-              </button>
-            </div>
-          </div>
-        </div>
       )}
 
       {/* Reverse validation — the Saturday still carries allocations, so the revert is refused and

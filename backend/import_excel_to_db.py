@@ -1,12 +1,12 @@
 """
 import_excel_to_db.py
 --------------------
-Reads the "Discretizado" sheet from HorasB3.xlsx (or any provided path),
+Reads the "Discretizado" sheet from the source workbook,
 drops + recreates monthly_demand, and bulk-inserts all rows.
 
 Each row stores:
-  â€¢ row_json  â€” ALL original columns as a JSON string (exact column names/values)
-  â€¢ shortcut columns (item, wsn, ano, mes, fw, â€¦) â€” indexed copies for fast queries
+  • row_json  — ALL original columns as a JSON string (exact column names/values)
+  • shortcut columns (item, wsn, ano, mes, fw, …) — indexed copies for fast queries
 
 row_json lets _db_to_df() reconstruct a DataFrame that is column-for-column
 identical to xl.parse("Discretizado"), fixing assembly-details & optimizer bugs.
@@ -48,20 +48,11 @@ logger = logging.getLogger(__name__)
 
 
 def _ensure_ver_col(db: Session, table: str) -> None:
-    """Add `ver` column and ensure db_config table exists (idempotent)."""
+    """Make sure db_config exists so the active-version pointer has somewhere to live."""
     try:
         DbConfig.__table__.create(db.get_bind(), checkfirst=True)
     except Exception as exc:
         logger.warning("Create db_config: %s", exc)
-    for ddl in [
-        f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS ver INTEGER NOT NULL DEFAULT 0",
-    ]:
-        try:
-            db.execute(text(ddl))
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            logger.warning("ALTER TABLE %s ADD COLUMN ver: %s", table, exc)
 
 
 def _discard_staging(db: Session, table: str, staging_ver: int) -> None:
@@ -173,13 +164,13 @@ _INSERT_CHUNK_ROWS  = 500
 def _insert_records(db: Session, records: list) -> int:
     """Persist a list of ORM instances with ONE multi-values INSERT per chunk.
 
-    Replaces ``db.bulk_save_objects(records)``. The driver here is pg8000 (pure
+    Replaces ``db.bulk_save_objects(records)``. A DBAPI driver (pure
     Python), whose ``Cursor.executemany`` is literally::
 
         for parameters in param_sets:
             self.execute(operation, parameters)
 
-    — i.e. one full network round trip PER ROW against the Supabase pooler, which
+    — i.e. one full round trip PER ROW against the database, which
     is what made a 5k-row base take minutes rather than seconds. ``insert(Model)
     .values([...])`` compiles instead to a single ``INSERT ... VALUES (...), (...)``,
     so a chunk of 500 rows costs one round trip.
@@ -248,21 +239,9 @@ def _mode_summary(mode: str, carried: int, added: int, duplicates: int, skipped:
     return f"{total} registros importados ({skipped} ignorados)."
 
 
-def _ensure_monthly_demand_schema(db: Session) -> None:
-    for ddl in [
-        "ALTER TABLE monthly_demand ADD COLUMN IF NOT EXISTS lh DOUBLE PRECISION",
-        "ALTER TABLE monthly_demand ADD COLUMN IF NOT EXISTS lm INTEGER",
-        "ALTER TABLE monthly_demand ADD COLUMN IF NOT EXISTS turnos INTEGER",
-    ]:
-        try:
-            db.execute(text(ddl))
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            logger.warning("ALTER TABLE monthly_demand: %s", exc)
 
 
-# â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Helpers ───────────────────────────────────────────────────────────────────
 
 def _normalize(txt: Any) -> str:
     s = unicodedata.normalize("NFD", str(txt or ""))
@@ -376,7 +355,7 @@ def _row_to_json(row: pd.Series) -> str:
     return json.dumps(result, ensure_ascii=False)
 
 
-# â”€â”€ Core import logic â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── Core import logic ─────────────────────────────────────────────────────────
 
 def _col_has_data(df: pd.DataFrame, col: str | None) -> bool:
     """Return True if the column exists and has at least one non-null, non-empty value."""
@@ -455,7 +434,7 @@ def import_excel_to_db(filepath: str | Path, db: Session, progress_callback=None
         return {"status": "error", "message": f"Falha ao abrir Excel: {exc}"}
 
     if "Discretizado" not in xl.sheet_names:
-        return {"status": "error", "message": "Aba 'Discretizado' nÃ£o encontrada."}
+        return {"status": "error", "message": "Aba 'Discretizado' não encontrada."}
 
     MAX_ROWS = 50_000
     _progress("[INFO] Lendo aba 'Discretizado'...")
@@ -465,7 +444,7 @@ def import_excel_to_db(filepath: str | Path, db: Session, progress_callback=None
         return {"status": "error", "message": f"Erro ao ler aba 'Discretizado': {exc}"}
     _progress(f"[INFO] {len(df)} linhas encontradas na planilha.")
 
-    # â”€â”€ Discover shortcut columns (for indexed ORM fields) â”€â”€â”€â”€â”€â”€â”€
+    # ── Discover shortcut columns (for indexed ORM fields) ───────
     def fc(*candidates: str) -> str | None:
         return _find_col(df, list(candidates))
 
@@ -508,7 +487,6 @@ def import_excel_to_db(filepath: str | Path, db: Session, progress_callback=None
         Base.metadata.create_all(bind=db.get_bind())
     except Exception as exc:
         logger.warning("create_all warning (non-fatal): %s", exc)
-    _ensure_monthly_demand_schema(db)
     _ensure_ver_col(db, "monthly_demand")
     prod_ver    = get_active_ver(db, "monthly_demand")
     staging_ver = 1 - prod_ver
@@ -519,7 +497,7 @@ def import_excel_to_db(filepath: str | Path, db: Session, progress_callback=None
     # Append mode: staging starts as a copy of the live base, so the swap keeps it.
     carried, seen = _seed_append(db, "monthly_demand", prod_ver, staging_ver, _progress) if append else (0, set())
 
-    # â”€â”€ Insert new records â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # ── Insert new records ────────────────────────────────────────
     records: list[MonthlyDemand] = []
     # One multi-values INSERT per batch (see _insert_records): 500 rows = 1 round
     # trip, where bulk_save_objects cost 500. Kept batched (rather than one giant
@@ -731,11 +709,6 @@ def import_itens_rout_to_db(filepath: str | Path, db: Session, progress_callback
         Base.metadata.create_all(bind=db.get_bind(), tables=[Base.metadata.tables["itens_rout"]])
     except Exception as exc:
         logger.warning("create_all itens_rout: %s", exc)
-    try:
-        db.execute(text("ALTER TABLE itens_rout ENABLE ROW LEVEL SECURITY"))
-        db.commit()
-    except Exception as exc:
-        db.rollback(); logger.warning("ALTER TABLE itens_rout RLS: %s", exc)
     _ensure_ver_col(db, "itens_rout")
     _drop_unused_indexes(db, "itens_rout")   # before staging inserts, so they pay nothing
 
@@ -891,11 +864,6 @@ def import_plano_prod_to_db(filepath: str | Path, db: Session, progress_callback
         Base.metadata.create_all(bind=db.get_bind(), tables=[Base.metadata.tables["plano_prod"]])
     except Exception as exc:
         logger.warning("create_all plano_prod: %s", exc)
-    try:
-        db.execute(text("ALTER TABLE plano_prod ENABLE ROW LEVEL SECURITY"))
-        db.commit()
-    except Exception as exc:
-        db.rollback(); logger.warning("ALTER TABLE plano_prod RLS: %s", exc)
     _ensure_ver_col(db, "plano_prod")
     _drop_unused_indexes(db, "plano_prod")   # before staging inserts, so they pay nothing
 
@@ -1053,30 +1021,8 @@ def import_schedule_to_db(filepath: str | Path, db: Session, progress_callback=N
         Base.metadata.create_all(bind=db.get_bind(), tables=[Base.metadata.tables["schedule"]])
     except Exception as exc:
         logger.warning("create_all schedule: %s", exc)
-    # Add new optional columns if the table already exists without them (idempotent)
-    for _col_ddl in [
-        "ALTER TABLE schedule ADD COLUMN IF NOT EXISTS linha TEXT",
-        "ALTER TABLE schedule ADD COLUMN IF NOT EXISTS finish_ms TEXT",
-        "ALTER TABLE schedule ADD COLUMN IF NOT EXISTS contract_ms TEXT",
-        # Takt must hold 0.5 increments (models.py declares Float). Legacy tables were created
-        # with an INTEGER takt column, which silently rounded 2.5→2 on insert while row_json kept
-        # 2.5 — the schedule/Resumo takt bug. Widen it to double precision (idempotent: a no-op
-        # when already double precision) so decimal takts persist on every (re)import.
-        "ALTER TABLE schedule ALTER COLUMN takt TYPE double precision USING takt::double precision",
-    ]:
-        try:
-            db.execute(text(_col_ddl))
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            logger.warning("ALTER TABLE schedule: %s", exc)
-    # Enable RLS (idempotent — safe to run even if already enabled)
-    try:
-        db.execute(text("ALTER TABLE schedule ENABLE ROW LEVEL SECURITY"))
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.warning("ALTER TABLE schedule RLS: %s", exc)
+    # No ALTER TABLE here: SQLite has neither ADD COLUMN IF NOT EXISTS nor RLS, and the demo
+    # database is created from the current models on every boot, so there is nothing to migrate.
     _ensure_ver_col(db, "schedule")
     _drop_unused_indexes(db, "schedule")   # before staging inserts, so they pay nothing
     sched_prod_ver    = get_active_ver(db, "schedule")
@@ -1256,27 +1202,8 @@ def import_locos_rout_to_db(filepath: str | Path, db: Session, progress_callback
         Base.metadata.create_all(bind=db.get_bind(), tables=[Base.metadata.tables["locos_rout"]])
     except Exception as exc:
         logger.warning("create_all locos_rout: %s", exc)
-    # Add new optional columns if the table already exists without them (idempotent)
-    for _col_ddl in [
-        "ALTER TABLE locos_rout ADD COLUMN IF NOT EXISTS descricao TEXT",
-        "ALTER TABLE locos_rout ADD COLUMN IF NOT EXISTS workorder TEXT",
-        "ALTER TABLE locos_rout ADD COLUMN IF NOT EXISTS part_desc TEXT",
-        "ALTER TABLE locos_rout ADD COLUMN IF NOT EXISTS escopo TEXT",
-        "ALTER TABLE locos_rout ADD COLUMN IF NOT EXISTS linha TEXT",
-    ]:
-        try:
-            db.execute(text(_col_ddl))
-            db.commit()
-        except Exception as exc:
-            db.rollback()
-            logger.warning("ALTER TABLE locos_rout: %s", exc)
-    # Enable RLS (idempotent)
-    try:
-        db.execute(text("ALTER TABLE locos_rout ENABLE ROW LEVEL SECURITY"))
-        db.commit()
-    except Exception as exc:
-        db.rollback()
-        logger.warning("ALTER TABLE locos_rout RLS: %s", exc)
+    # No ALTER TABLE here: SQLite has neither ADD COLUMN IF NOT EXISTS nor RLS, and the demo
+    # database is created from the current models on every boot, so there is nothing to migrate.
     _ensure_ver_col(db, "locos_rout")
     _drop_unused_indexes(db, "locos_rout")   # before staging inserts, so they pay nothing
     lr_prod_ver    = get_active_ver(db, "locos_rout")
@@ -1531,32 +1458,32 @@ def import_headcount_to_db(filepath: str | Path, db: Session, progress_callback=
         return {"status": "error", "message": f"Erro durante importacao de headcount: {_exc}"}
 
 
-# â”€â”€ CLI entry-point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# ── CLI entry-point ───────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
     import dotenv
     from env_paths import resolve_env_file
 
-    # Resolve through env_paths, not the cwd: the .env lives outside the OneDrive-synced tree.
+    # Resolve through env_paths, not the cwd: the .env lives outside the synced folder.
     _env_file = resolve_env_file()
     if _env_file is not None:
         dotenv.load_dotenv(dotenv_path=_env_file)
 
     if engine is None:
-        print("[import_excel_to_db] DATABASE_URL nÃ£o configurada.")
+        print("[import_excel_to_db] DATABASE_URL não configurada.")
         sys.exit(1)
 
     # Ensure tables exist (create_all is also called inside import_excel_to_db)
     Base.metadata.create_all(bind=engine)
 
-    xl_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "HorasB3.xlsx"
+    xl_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).parent / "data" / "demo_source.xlsx"
     print(f"[import_excel_to_db] Importando {xl_path} ...")
 
     with get_db() as db:
         result = import_excel_to_db(xl_path, db)
 
     if result["status"] == "ok":
-        print(f"[import_excel_to_db] âœ“ {result['message']}")
+        print(f"[import_excel_to_db] ✓ {result['message']}")
     else:
         print(f"[import_excel_to_db] ✗ {result['message']}")
         sys.exit(1)

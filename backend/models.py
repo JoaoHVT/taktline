@@ -1,10 +1,10 @@
 """
 models.py
 ---------
-SQLAlchemy ORM models for OptVision data.
+SQLAlchemy ORM models for Taktline data.
 
 Table: monthly_demand
-  Mirrors each row in the "Discretizado" sheet of HorasB3.xlsx.
+  Mirrors each row of the source "Discretizado" sheet.
   row_json stores the complete original row so _db_to_df() can reconstruct
   a DataFrame that is byte-for-byte identical to xl.parse("Discretizado").
   Shortcut columns (item, wsn, ano, mes, fw, etc.) are kept as indexed
@@ -400,81 +400,6 @@ class ProjectionBaseline(Base):
     )
 
 
-class LogisticaBase(Base):
-    """The Logística workbook persisted as the shared default base for the tab.
-
-    ONE row is meaningful at a time: saving REPLACES whatever was stored, because the feature
-    is "the base everyone opens the tab on", not a version history. The write path deletes the
-    previous row inside the same transaction, so a failed save cannot leave two candidates.
-
-      file_name   : the workbook the base was read from, shown in the header so it is obvious
-                    WHICH file everyone is looking at.
-      row_count   : denormalised for the status line — reading it must not cost parsing the blob.
-      payload_json: {"columns": [...], "matrix": [[cell, ...], ...]} — the SOURCE cells, not the
-                    parsed model. The client re-runs the very same parser it runs on an uploaded
-                    file, so a stored base and a freshly imported one can never diverge; storing
-                    the parsed rows would freeze today's parsing into the database.
-    """
-    __tablename__ = "logistica_base"
-
-    id           = Column(Integer, primary_key=True, autoincrement=True)
-    file_name    = Column(String, nullable=False, default="", server_default="")
-    row_count    = Column(Integer, nullable=False, default=0, server_default="0")
-    payload_json = Column(Text, nullable=False)
-    created_at   = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    created_by   = Column(String, nullable=True)
-
-
-class GcrPlanSnapshot(Base):
-    """The published "Plano de Serviços - GCR" — its FINAL rows, after every user edit.
-
-    WHAT IS STORED, AND WHAT DELIBERATELY IS NOT.
-
-    Only the computed result. Not the source workbooks, not the weighting that produced it, not
-    the solver state — nothing that would let the plan be re-derived. This is the opposite of
-    `logistica_base` (which stores SOURCE cells precisely so the client re-parses them), and the
-    reason is that the two answer different questions. Logística asks "what did the file say";
-    the GCR plan asks "what did the planner DECIDE", and the decision only exists after
-    Balanceamento, Sequenciamento and a pass of manual row edits. Storing the inputs would
-    freeze today's arithmetic into the database and, worse, would silently discard the manual
-    edits that are the whole point of publishing.
-
-      payload_json : {"columns": [...], "matrix": [[cell, ...], ...]} — COLUMNAR, one array per
-                     row rather than an object per row. At ~20k rows the object form is ~7 MB of
-                     which most is the fifteen key names repeated twenty thousand times; the
-                     columnar form is ~3 MB and parses faster at both ends.
-      settings_json: {consumoWeight, trendWeight, wipAdjust, balance, sequence, stageOrder, …} —
-                     mostly PROVENANCE: it records under what assumptions the rows were produced
-                     so a reader can see them, and the rows remain the only truth.
-                     ONE part of it is an input the client re-solves from — `trendColumns` /
-                     `trendMatrix`, the fitted historical models (a few tens of KB at most). They
-                     are stored because they are the only thing here that CANNOT be recovered
-                     from the rows: the trend layer is fitted to a history sheet no plan carries,
-                     and without the models a plan published at trendWeight > 0 re-solves
-                     applying no trend at all while its own settings claim one. Opaque to this
-                     table either way — the blob is stored and handed back verbatim.
-      period_from / period_to : "YYYY-MM" bounds, denormalised so the header can state the
-                     horizon without parsing the blob.
-      version      : optimistic-concurrency counter. A client sends the version it loaded and
-                     the write is refused with 409 if it has moved. Two planners each holding
-                     hours for a different área would otherwise silently erase one another —
-                     last-write-wins is not acceptable for a shared published plan.
-      row_count    : denormalised for the status line, same reason as `logistica_base`.
-    """
-    __tablename__ = "gcr_plan_snapshot"
-
-    id            = Column(Integer, primary_key=True, autoincrement=True)
-    file_name     = Column(String, nullable=False, default="", server_default="")
-    row_count     = Column(Integer, nullable=False, default=0, server_default="0")
-    period_from   = Column(String, nullable=False, default="", server_default="")
-    period_to     = Column(String, nullable=False, default="", server_default="")
-    payload_json  = Column(Text, nullable=False)
-    settings_json = Column(Text, nullable=True)
-    version       = Column(Integer, nullable=False, default=1, server_default="1")
-    created_at    = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    created_by    = Column(String, nullable=True)
-
-
 class UserPermission(Base):
     """
     Access-control role + account state for a user. Roles form a ladder: Reader < Editor < Admin.
@@ -482,7 +407,7 @@ class UserPermission(Base):
     Every user who logs in is now recorded here (auto-registered as Reader on first login),
     so admins have a full roster and per-user state (blocked flag, last login, lockout
     history) has a row to live on. The lookup key is the `username` = the portion of the
-    corporate e-mail BEFORE the '@' (e.g. "joao.voss" from "joao.voss@wabtec.com"),
+    e-mail BEFORE the '@' (e.g. "demo" from "demo@example.com"),
     lower-cased, so identity is independent of the e-mail domain.
 
       role       : 'reader' | 'editor' | 'admin'.
@@ -530,49 +455,6 @@ class UserPermission(Base):
 
     __table_args__ = (
         UniqueConstraint("username", name="uq_user_permission_username"),
-    )
-
-
-class AccessRequest(Base):
-    """
-    A self-service request for an account, waiting for an admin decision.
-
-    With Entra ID gone there is no directory that can pre-validate anybody before they
-    reach the app, so the old "Bloquear Novos Usuários" switch stopped being an exception
-    and became the rule: nobody is auto-registered any more. Somebody without an account
-    fills in username + e-mail + the password they want, and lands HERE. Approval copies
-    the row into user_permissions (with the ALREADY-CHOSEN password hash, so the user logs
-    in with the password they typed and no secret ever has to be transmitted back).
-
-    The password hash is stored on the REQUEST rather than creating a disabled
-    user_permissions row up front, deliberately: a pending request must not be a username
-    that already exists — otherwise a rejected/never-approved request would silently
-    reserve a name, and the roster (which is also the blocked-cache and the audit target
-    list) would fill with accounts that were never granted.
-
-      status      : 'pending' | 'approved' | 'rejected'
-      client_id   : opaque per-browser id sent as X-Client-Id, used ONLY for the
-                    5-submissions-per-browser rate limit. Not an identity and never
-                    trusted as one — it is client-supplied and trivially resettable;
-                    the IP-based bucket is what backs it up.
-    """
-    __tablename__ = "access_request"
-
-    id            = Column(Integer, primary_key=True, autoincrement=True)
-    username      = Column(String, nullable=False, index=True)
-    email         = Column(String, nullable=True)
-    password_hash = Column(String, nullable=False)
-    status        = Column(String, nullable=False, default="pending", index=True)
-    note          = Column(Text,   nullable=True)     # optional justification typed by the requester
-    client_id     = Column(String, nullable=True, index=True)
-    ip            = Column(String, nullable=True)
-    created_at    = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
-    decided_at    = Column(DateTime, nullable=True)
-    decided_by    = Column(String,   nullable=True)
-    decided_role  = Column(String,   nullable=True)   # role granted on approval
-
-    __table_args__ = (
-        Index("ix_access_request_status_created", "status", "created_at"),
     )
 
 
@@ -938,7 +820,7 @@ class AuthThrottle(Base):
     PERSISTED brute-force state (failed-password lockout + per-bucket rate limit).
 
     Kept in the DB — not just process memory — so the controls survive a restart,
-    a redeploy, and (critically) a Railway scale-to-zero cold start. Otherwise the
+    a redeploy, and (critically) a scale-to-zero cold start. Otherwise the
     5-strikes-in-a-row lockout could be evaded by pacing guesses so the container
     sleeps and resets its in-memory counters between bursts.
 
@@ -966,133 +848,3 @@ class AuthThrottle(Base):
     __table_args__ = (
         PrimaryKeyConstraint("bucket", "key", name="pk_auth_throttle"),
     )
-
-
-# ── Horas Transacionadas (Denodo) — persisted summary ────────────────────────
-# PHASE 1 of the actual-hours feature. Denodo access is not available in every
-# environment/session, so the data is pulled ONCE by someone who has it and stored
-# here; the display layer (phase 2) reads these tables and never touches Denodo.
-#
-# Storage shape: the Denodo source is one row per shop-floor TRANSACTION (millions of
-# rows over a year). That grain is never needed downstream, so the VQL aggregates to
-# one row per (WORK ORDER, WORKSTATION, PART NUMBER) before anything is stored —
-# bounded by the routing's breadth instead of by shop activity, which is what keeps
-# this table small.
-#
-# What is deliberately NOT stored: the locomotive. It is derivable from the work-order
-# prefix, but that derivation IS the phase-2 matching rule and it is unvalidated until
-# this data reaches production. Storing a derived loco would bake an unproven rule into
-# persisted rows and go stale whenever the schedule changes. The raw work order is kept
-# instead, so the matching rule can be corrected without re-importing.
-
-class TransactedHoursBatch(Base):
-    """
-    One import run. Exactly ONE row is `active` at a time — the batch phase 2 reads.
-
-    Superseded batches are deleted on a successful save rather than accumulating: the
-    detail rows are the bulk of the storage and nothing reads history, so keeping old
-    batches would grow the table without ever being queried.
-    """
-    __tablename__ = "transacted_hours_batch"
-
-    id          = Column(Integer, primary_key=True, autoincrement=True)
-    active      = Column(Boolean, nullable=False, default=True, index=True)
-
-    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    created_by  = Column(String, nullable=True)          # username (local part of the email)
-
-    # The period + orgs this snapshot covers. Shown in the UI so a stale or
-    # wrongly-scoped snapshot is visible rather than silently misread as current.
-    start_date  = Column(String, nullable=True)          # ISO yyyy-mm-dd
-    end_date    = Column(String, nullable=True)          # ISO yyyy-mm-dd
-    orgs        = Column(String, nullable=True)          # comma-joined, e.g. "GCM,GCR"
-
-    row_count   = Column(Integer, nullable=False, default=0)      # stored detail rows
-    total_hours = Column(Float,   nullable=False, default=0.0)
-    txn_count   = Column(Integer, nullable=False, default=0)      # source transactions behind them
-    # True when the Denodo fetch hit its row cap — the stored hours are then an
-    # UNDER-COUNT. Persisted (not just warned once) so phase 2 can surface it at
-    # render time instead of presenting a truncated snapshot as complete.
-    truncated   = Column(Boolean, nullable=False, default=False)
-
-
-class TransactedHoursRow(Base):
-    """One (work order, workstation, part number) bucket of applied hours."""
-    __tablename__ = "transacted_hours_row"
-
-    id          = Column(Integer, primary_key=True, autoincrement=True)
-    batch_id    = Column(Integer, ForeignKey("transacted_hours_batch.id", ondelete="CASCADE"),
-                         nullable=False, index=True)
-
-    workorder   = Column(String, nullable=False, index=True)
-    workstation = Column(String, nullable=True)
-    part_number = Column(String, nullable=True)
-
-    # Provenance, not identity: which plant (organizationcode) and value stream booked the
-    # hours. Carried so a wrongly-scoped pull is diagnosable from the stored rows. NOT used
-    # to decide which locomotive a work order belongs to — see
-    # services.transacted_hours._fold_by_loco, which settles that by routing. Nullable
-    # because batches written before these columns existed have no value for them.
-    org         = Column(String, nullable=True)
-    area        = Column(String, nullable=True)
-
-    hours       = Column(Float,   nullable=False, default=0.0)
-    txn_count   = Column(Integer, nullable=False, default=0)
-
-    __table_args__ = (
-        # Phase 2 scans a batch and prefix-matches work orders to locos, so every read
-        # starts from (batch_id, workorder).
-        Index("ix_th_row_batch_wo", "batch_id", "workorder"),
-    )
-
-
-class TransactedHoursSnapshot(Base):
-    """The same snapshot as the two tables above, stored as ONE row. This is the write path.
-
-    WHY IT REPLACED THE PER-ROW TABLE.
-
-    `TransactedHoursRow` is one database row per (work order, workstation, part number)
-    bucket, written with `bulk_save_objects`. The driver is pg8000 (pure Python), whose
-    `executemany` is a Python loop calling `execute` once per parameter set — so an N-row
-    save is N extended-query round trips to the Supabase pooler, over TLS, with NullPool.
-    At the ~6.6k rows the GCR plan carries that is already slow; at the 33k–66k this data
-    produces it runs for minutes and passes the client's 300 s save timeout. The cost is
-    the round trips, not the bytes: the same rows as a single columnar blob are ~4.5 MB and
-    ONE insert.
-
-    Modelled on `GcrPlanSnapshot`, for the same reasons and with the same shape:
-
-      payload_json : {"columns": [...], "matrix": [[cell, ...], ...]} — COLUMNAR, one array
-                     per row rather than an object per row, so the seven key names are not
-                     repeated once per row. Read by name via `columns` (never by fixed
-                     position), which is what makes a new field an appended column instead
-                     of an `ALTER TABLE` — the reason `_ensure_provenance_columns` is gone.
-      version      : optimistic-concurrency counter. A client sends the version it loaded
-                     and the write is refused with 409 if it has moved, so two people
-                     importing different periods cannot silently erase one another.
-      row_count / total_hours / txn_count / truncated / start_date / end_date / orgs :
-                     denormalised onto real columns so the status line — which every
-                     session loads — never parses the blob.
-
-    The relational pair is KEPT and still read: `rollup_by_loco` and `active_batch_status`
-    fall back to it when no snapshot exists, so a database holding only a pre-migration
-    batch keeps working untouched. Nothing writes it any more.
-    """
-    __tablename__ = "transacted_hours_snapshot"
-
-    id          = Column(Integer, primary_key=True, autoincrement=True)
-
-    created_at  = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    created_by  = Column(String, nullable=True)          # username (local part of the email)
-
-    start_date  = Column(String, nullable=True)          # ISO yyyy-mm-dd
-    end_date    = Column(String, nullable=True)          # ISO yyyy-mm-dd
-    orgs        = Column(String, nullable=True)          # comma-joined, e.g. "GCM,GCR"
-
-    row_count   = Column(Integer, nullable=False, default=0, server_default="0")
-    total_hours = Column(Float,   nullable=False, default=0.0, server_default="0")
-    txn_count   = Column(Integer, nullable=False, default=0, server_default="0")
-    truncated   = Column(Boolean, nullable=False, default=False, server_default="false")
-
-    version     = Column(Integer, nullable=False, default=1, server_default="1")
-    payload_json = Column(Text, nullable=False)

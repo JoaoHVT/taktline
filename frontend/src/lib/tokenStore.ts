@@ -17,14 +17,13 @@
  *     during a shift and a per-tab session would ask for the password in each one.
  */
 
-const STORAGE_KEY = 'optvision.session'
+const STORAGE_KEY = 'taktline.session'
 
 export interface SessionUser {
   username: string
   email: string
   name: string
   role?: string
-  mustChangePassword?: boolean
 }
 
 let _token: string | null = null
@@ -133,7 +132,7 @@ export function restoreSession(): { token: string; user: SessionUser } | null {
 // ONE thing: the server-side cap of 5 access requests per browser. It is not an identity
 // and is never treated as one — it is client-supplied and a user can clear it in two
 // clicks; the server's per-IP counter is what backs it up.
-const CLIENT_ID_KEY = 'optvision.clientId'
+const CLIENT_ID_KEY = 'taktline.clientId'
 
 export function getClientId(): string {
   try {

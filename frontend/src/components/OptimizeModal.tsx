@@ -4,7 +4,7 @@
  * Step 1 (mode select): "Rodar Solver" | "Estado Atual" | Cancelar
  * Step 2 (params):      TOP %, GAP %, Tempo (s), Fases (1–6)
  *
- * Mirrors _prompt_optimization_execution_parameters() from CapB3356103.py.
+ * Mirrors _prompt_optimization_execution_parameters() from the original desktop tool.
  * Defaults: TOP 90 %, GAP 2 %, Tempo 60 s, Fases 6.
  */
 'use client'
@@ -118,7 +118,7 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
   const [step, setStep] = useState<Step>('mode')
   const [showAdvanced, setShowAdvanced] = useState(false)
 
-  // Param state — mirrors CapB3356103.py defaults
+  // Param state — mirrors the original desktop tool defaults
   const [topPct,    setTopPct]    = useState(90.0)
   const [gapPct,    setGapPct]    = useState(2.0)
   const [timeLimit, setTimeLimit] = useState(60.0)

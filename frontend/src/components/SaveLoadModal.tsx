@@ -27,7 +27,7 @@ type View = 'menu' | 'password-save' | 'password-load'
 
 export function SaveLoadModal({ onSave, onLoad, onClose }: Props) {
   const fileRef = useRef<HTMLInputElement>(null)
-  const [filename, setFilename] = useState(`optvision_sessao_${todayStr()}`)
+  const [filename, setFilename] = useState(`taktline_sessao_${todayStr()}`)
   const [view, setView] = useState<View>('menu')
 
   // Save state
@@ -42,7 +42,7 @@ export function SaveLoadModal({ onSave, onLoad, onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [loadErr, setLoadErr] = useState<string | null>(null)
 
-  const cleanFilename = filename.trim() || `optvision_sessao_${todayStr()}`
+  const cleanFilename = filename.trim() || `taktline_sessao_${todayStr()}`
   const pwMismatch = pw2.length > 0 && pw1 !== pw2
   const canSave = pw1.length >= MIN_PASSWORD_LEN && pw1 === pw2 && !saving
 
@@ -278,7 +278,7 @@ export function SaveLoadModal({ onSave, onLoad, onClose }: Props) {
                   value={filename}
                   onChange={e => setFilename(e.target.value)}
                   className="flex-1 px-3 py-1.5 text-xs text-gray-900 bg-transparent focus:outline-none"
-                  placeholder={`optvision_sessao_${todayStr()}`}
+                  placeholder={`taktline_sessao_${todayStr()}`}
                   spellCheck={false}
                 />
                 <span className="pr-3 text-[10px] text-gray-400 font-mono shrink-0">.json</span>

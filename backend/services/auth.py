@@ -1,29 +1,21 @@
 """
-services/auth.py — autenticação PRÓPRIA (usuário + senha) para o FastAPI.
+services/auth.py — autenticação (usuário + senha) para o FastAPI.
 
-Substitui o Azure AD / Microsoft Entra ID, que deixou de funcionar. O que mudou:
+A identidade mora no próprio banco (user_permissions.password_hash) e este módulo é o
+EMISSOR do token além de ser o validador:
 
-  ANTES  o navegador falava com a Entra ID (MSAL), recebia um ID token RS256 e o backend
-         só VALIDAVA aquele token contra o JWKS público da Microsoft. A identidade e a
-         senha eram problema do provedor; aqui só existia verificação.
+  1. POST /api/auth/login  (main.py) confere usuário + senha com verify_password().
+  2. issue_session_token() assina um JWT HS256 com o segredo do servidor.
+  3. O cliente manda  Authorization: Bearer <token>  em toda requisição.
+  4. validate_bearer_token() decodifica e confere assinatura, expiração e tipo.
 
-  AGORA  a identidade mora no PRÓPRIO banco (user_permissions.password_hash) e este módulo
-         é o EMISSOR do token além de ser o validador. O fluxo é:
+ESTA DEMONSTRAÇÃO TEM UMA CONTA SÓ (ver tools/seed_demo_db.py). Não há cadastro, redefinição
+nem administração de usuários — o que sobra aqui é o mecanismo de sessão, que é real e é o
+que a tela de login demonstra. O papel continua saindo de `user_permissions.role`, resolvido
+a cada requisição em main._current_role e nunca congelado dentro do token.
 
-           1. POST /api/auth/login  (main.py) confere usuário + senha com verify_password().
-           2. issue_session_token() assina um JWT HS256 com o segredo do servidor.
-           3. O cliente manda  Authorization: Bearer <token>  em toda requisição.
-           4. validate_bearer_token() decodifica e confere assinatura, expiração e tipo,
-              devolvendo o MESMO formato de dict que a versão Entra devolvia — por isso
-              nenhuma rota de main.py precisou mudar de assinatura.
-
-O que este módulo deliberadamente NÃO faz:
-  • não guarda senha em texto puro em lugar nenhum (só o hash PBKDF2 derivado);
-  • não decide papel/permissão — isso continua sendo `user_permissions.role`, resolvido em
-    main._current_role a cada requisição, para que uma promoção/demissão valha na hora e
-    não fique congelada dentro de um token de 12 h;
-  • não verifica e-mail (o envio de confirmação é um passo FUTURO, ainda não implementado);
-    o domínio corporativo é a única triagem automática que existe no cadastro.
+O que este módulo deliberadamente NÃO faz: guardar senha em texto puro em lugar nenhum —
+só o hash PBKDF2 derivado.
 """
 
 from __future__ import annotations
@@ -48,7 +40,7 @@ logger = logging.getLogger(__name__)
 #: Não é mais checado a cada requisição: depois que a conta existe no banco, ela é a
 #: identidade — reconferir o domínio em toda chamada só recriaria a dependência que
 #: acabou de sair, e um admin que aprovou a conta já decidiu por ela.
-ALLOWED_DOMAIN = os.getenv("ALLOWED_DOMAIN", "wabtec.com").strip().lower()
+ALLOWED_DOMAIN = os.getenv("ALLOWED_DOMAIN", "example.com").strip().lower()
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
@@ -56,7 +48,7 @@ ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 #: cliente renova em /api/auth/refresh enquanto a aba fica aberta.
 SESSION_TTL_S = int(os.getenv("AUTH_SESSION_TTL_SECONDS", str(12 * 60 * 60)))
 
-_ISSUER = "optvision"
+_ISSUER = "taktline"
 _ALGO = "HS256"
 
 # Fôlego de relógio na expiração — mesma razão da versão anterior: navegador e servidor
@@ -66,35 +58,15 @@ _EXP_LEEWAY_SECONDS = 60
 _bearer = HTTPBearer(auto_error=False)
 
 
-def _derive_fallback_secret() -> str:
-    """Segredo determinístico para quando AUTH_SECRET não está configurado.
-
-    Precisa ser ESTÁVEL entre reinícios (senão todo deploy derruba todas as sessões) e não
-    pode ser adivinhável, então é derivado dos segredos que o servidor já tem. É um
-    paliativo: em produção sem AUTH_SECRET o boot registra um erro, porque quem conhecer
-    ADMIN_PASSWORD/IMPORT_PASSWORD passaria a poder FORJAR sessões, o que é bem mais grave
-    do que conhecer as senhas em si.
-    """
-    material = "|".join([
-        os.getenv("ADMIN_PASSWORD", ""),
-        os.getenv("IMPORT_PASSWORD", ""),
-        os.getenv("DATABASE_URL", ""),
-        "optvision-local-auth-v1",
-    ])
-    return hashlib.sha256(material.encode("utf-8")).hexdigest()
-
-
-_AUTH_SECRET = os.getenv("AUTH_SECRET", "").strip() or _derive_fallback_secret()
+# Sem AUTH_SECRET no ambiente, o segredo é SORTEADO a cada boot. Um segredo derivado de
+# outras variáveis seria estável entre reinícios, mas também adivinhável por quem conhecesse
+# essas variáveis — e num processo descartável a estabilidade não vale nada: a única coisa
+# que ela preservaria são sessões de um banco que o próximo boot recria de qualquer forma.
+# O efeito visível é que reiniciar o servidor pede um login novo, que é o correto aqui.
+_AUTH_SECRET = os.getenv("AUTH_SECRET", "").strip() or secrets.token_hex(32)
 
 if not os.getenv("AUTH_SECRET", "").strip():
-    if ENVIRONMENT == "production":
-        logger.error(
-            "[auth] AUTH_SECRET não configurado — usando segredo derivado. Defina AUTH_SECRET "
-            "(valor aleatório de 32+ bytes) no ambiente: sem ele, quem conhecer ADMIN_PASSWORD "
-            "consegue assinar sessões válidas."
-        )
-    else:
-        logger.warning("[auth] AUTH_SECRET não configurado — usando segredo derivado (dev).")
+    logger.info("[auth] AUTH_SECRET ausente — segredo aleatório por boot; sessões não sobrevivem a um reinício.")
 
 
 def _secret() -> bytes:
@@ -150,37 +122,12 @@ def verify_password(password: str, stored: str | None) -> bool:
         return False
 
 
-#: Alfabeto sem caracteres ambíguos (0/O, 1/l/I). A senha gerada vai ser LIDA e DIGITADA
-#: por uma pessoa a partir de uma lista que o admin distribui, então "não dá para saber se
-#: é o L ou o um" é um modo de falha real, não preciosismo.
-_PW_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
 
 
-def generate_password(length: int = 12) -> str:
-    """Senha aleatória para migração de conta existente / redefinição pelo admin."""
-    return "".join(secrets.choice(_PW_ALPHABET) for _ in range(max(8, length)))
 
 
-# ── Política mínima de senha ─────────────────────────────────────────────────
-PASSWORD_MIN_LEN = 8
 
 
-def validate_password_strength(password: str) -> None:
-    """Levanta 400 se a senha escolhida pelo usuário for fraca demais.
-
-    Regra curta de propósito: comprimento mínimo e não ser só um caractere repetido.
-    Regras de composição (maiúscula + dígito + símbolo) empurram para senhas do tipo
-    'Senha@123', que passam na regra e caem em qualquer dicionário; o comprimento é o
-    fator que realmente importa.
-    """
-    pw = password or ""
-    if len(pw) < PASSWORD_MIN_LEN:
-        raise HTTPException(
-            status_code=400,
-            detail=f"A senha deve ter pelo menos {PASSWORD_MIN_LEN} caracteres.",
-        )
-    if len(set(pw)) < 4:
-        raise HTTPException(status_code=400, detail="Senha fraca demais. Use uma combinação menos repetitiva.")
 
 
 # ── Identidade ───────────────────────────────────────────────────────────────
@@ -196,18 +143,10 @@ def normalize_email(raw: str) -> str:
     return str(raw or "").strip().lower()
 
 
-def is_domain_allowed(email: str) -> bool:
-    """True se o e-mail satisfaz ALLOWED_DOMAIN (vazio ⇒ qualquer domínio serve)."""
-    e = normalize_email(email)
-    if "@" not in e:
-        return False
-    if not ALLOWED_DOMAIN:
-        return True
-    return e.split("@", 1)[1] == ALLOWED_DOMAIN
 
 
 def display_name_of(username: str) -> str:
-    """'joao.voss' → 'Joao Voss'. Só para exibição; nada depende disso."""
+    """'ana.silva' → 'Ana Silva'. Só para exibição; nada depende disso."""
     return (username or "").replace(".", " ").replace("_", " ").title() or username
 
 

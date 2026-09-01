@@ -75,7 +75,7 @@ function joinWsDesc(ws: string, desc: string, joiner: string): string {
   if (w.trim().toLowerCase() === d.trim().toLowerCase()) return w
   return `${w}${joiner}${d}`
 }
-// WORKORDER display = LOCO-WORKORDER (e.g. ES444227-WO01). DISPLAY ONLY — the internal `row.workorder`
+// WORKORDER display = LOCO-WORKORDER (e.g. MX104227-WO01). DISPLAY ONLY — the internal `row.workorder`
 // value (allocation / grouping / hours keys) is never touched. A blank Work Order stays blank: no
 // fallback, and never the locomotive on its own. The concatenation happens only when a real WO exists.
 function displayWorkorder(loco: string, workorder: string): string {

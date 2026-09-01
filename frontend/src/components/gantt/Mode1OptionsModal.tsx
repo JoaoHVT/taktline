@@ -9,7 +9,7 @@ import { X, Zap, GitBranch, MoveRight, CalendarPlus, Layers } from 'lucide-react
 
 const PURPLE = '#7B1FA2'
 
-// ES44 WS40↔WS50 swap is NOT a strategy — the optimizer evaluates it automatically in
+// MX10 WS40↔WS50 swap is NOT a strategy — the optimizer evaluates it automatically in
 // every strategy whenever it improves the solution (see schedule_conflict_optimizer.py).
 export type Mode1Strategy = 'shift_full' | 'shift_conflict_only'
 

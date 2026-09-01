@@ -9,7 +9,7 @@ import {
   type OptimizationPayload,
 } from '@/lib/api'
 
-const ACTIVE_JOB_KEY = 'optvision_active_job_id'
+const ACTIVE_JOB_KEY = 'taktline_active_job_id'
 
 const TERMINAL_STATES = new Set<string>(['done', 'error', 'cancelled'])
 

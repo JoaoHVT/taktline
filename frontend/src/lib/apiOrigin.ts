@@ -25,7 +25,7 @@
 /** start.py grava "1" quando existe porta de entrada TLS (PUBLIC_ORIGIN definido). */
 const SAME_ORIGIN = process.env.NEXT_PUBLIC_SAME_ORIGIN === '1'
 
-/** Base absoluta. Continua sendo a verdade nas implantacoes SEM proxy (Railway, dev
+/** Base absoluta. Continua sendo a verdade nas implantacoes SEM proxy (the host, dev
  *  puro) e no teste de host de isLocalApi(), que precisa do nome para decidir se o
  *  backend pode dormir. Nao a use para montar requisicao — use API_BASE. */
 export const CONFIGURED_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'

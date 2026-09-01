@@ -68,7 +68,7 @@ jobs:
           python-version: '3.13'
       - name: Install pip-audit
         run: python -m pip install --quiet pip-audit
-      # Audits the PINNED file, not an installed environment: requirements.txt is what Railway
+      # Audits the PINNED file, not an installed environment: requirements.txt is what the host
       # builds from, so it is the artifact that has to be clean. No project dependency is
       # installed here, which keeps the job fast and free of gurobipy/pyodbc build steps.
       - name: Audit pinned requirements

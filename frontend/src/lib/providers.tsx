@@ -1,7 +1,6 @@
 'use client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { useState } from 'react'
-import { ImportJobsProvider } from '@/context/ImportJobsContext'
 import { PermissionsProvider } from '@/context/PermissionsContext'
 import { AuthProvider } from '@/hooks/useAuth'
 
@@ -30,9 +29,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           useAuth (PermissionsProvider, a página, o cabeçalho, os modais do Gantt). */}
       <AuthProvider>
         <PermissionsProvider>
-          <ImportJobsProvider>
-            {children}
-          </ImportJobsProvider>
+          {children}
         </PermissionsProvider>
       </AuthProvider>
     </QueryClientProvider>

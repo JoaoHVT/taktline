@@ -5,7 +5,7 @@
  *
  * The problem it solves
  * ────────────────────
- * One serial can be planned twice: `ES442227` under New Locos and `B3#ES442227` under
+ * One serial can be planned twice: `MX1022` under New Locos and `B3#MX1022` under
  * Propulsion. The tag is artificial — added only because the schedule cannot hold two rows
  * of the same name — so the two rows are the same locomotive, and every consolidation that
  * counts locos or splits hours by Tipo reports it as two.
@@ -24,7 +24,7 @@
  *
  * SCOPE — deliberately narrow. These are pure functions applied at the point of DISPLAY, by
  * the two consolidations that opted in (Resumo Geral and the Carga de Fábrica home tree).
- * `SummaryTestResult` is shared with GETSA Planned and Plano de Produção, and `GanttData`
+ * `SummaryTestResult` is shared with Plano Externo and Plano de Produção, and `GanttData`
  * feeds the Schedule worker, so nothing here may mutate its input — every object a caller
  * could still be holding is cloned before it is touched. The Schedule, Production Planning
  * and the detailed views therefore keep seeing the unmerged truth.
@@ -41,8 +41,8 @@ const DISPLAY_TAG_RE = /^[A-Z0-9]{1,4}#/
  * The SERIAL behind a display name — the identity two Tipos can disagree about.
  *
  * Normalization, in order: upper-case, drop a leading `B3#`-style tag, then drop EVERY
- * non-alphanumeric character. That last step is what makes `B3#ES44-2227`, `ES44 2227` and
- * `ES442227` one locomotive: the two Tipos are maintained in different sheets and the same
+ * non-alphanumeric character. That last step is what makes `B3#MX10-22`, `MX10 22` and
+ * `MX1022` one locomotive: the two Tipos are maintained in different sheets and the same
  * serial is punctuated differently in each, so matching on the tag alone left real duplicates
  * unmerged. Only separators are removed — no digits, letters or ordering are touched, so two
  * genuinely different serials cannot collapse into one.
@@ -169,7 +169,7 @@ export function mergeSummaryLocoTypes(summary: SummaryTestResult): SummaryTestRe
   }
 
   // Clones the folding writes into. The source rows belong to a cached aggregate that Plano de
-  // Produção and GETSA Planned still read — mutating one would merge THEIR numbers too.
+  // Produção and Plano Externo still read — mutating one would merge THEIR numbers too.
   const clones = new Map<LocoRow, LocoRow>()
   for (const row of targetRow.values())
     clones.set(row, { ...row, hoursByYearMonth: { ...row.hoursByYearMonth }, hoursByFw: { ...row.hoursByFw } })

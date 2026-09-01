@@ -5,8 +5,7 @@ MIRROR OF `frontend/src/lib/tipos.ts`. The two must state the same Linhas and th
 or backend detection and frontend rendering disagree about the same two boxes — which is the
 bug the registry was extracted to end. There is no build step joining Python and TypeScript, so
 this file being a copy is unavoidable; what is avoidable is the copy being spread across two
-modules, which is what it used to be (`gantt_builder._LINHA_TO_TIPO` and
-`schedule_conflict_optimizer._loco_type`).
+modules, which is what it used to be (`gantt_builder._LINHA_TO_TIPO`).
 
 THE FLAG, and why the rules gate on it:
 

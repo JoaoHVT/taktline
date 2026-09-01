@@ -217,7 +217,6 @@ interface GanttModalFooterProps {
   showExportMenu: boolean
   setShowExportMenu: (fn: (v: boolean) => boolean) => void
   exportMenuRef: React.RefObject<HTMLDivElement | null>
-  handleExport: () => void
   handleExportSummary: (level: 'area' | 'subarea' | 'itens' | 'tipo' | 'modelo' | 'loco') => void
   /** Active Resumo Geral hierarchy: 'area' → Área/Subárea/Itens, 'locos' → Tipo/Modelo/Loco. */
   summaryRowMode: 'area' | 'locos'
@@ -282,7 +281,6 @@ export function GanttModalFooter({
   onceBuiltRef,
   showExportMenu, setShowExportMenu,
   exportMenuRef,
-  handleExport,
   handleExportSummary,
   summaryRowMode,
   onClose,
@@ -440,7 +438,7 @@ export function GanttModalFooter({
   // ── Scenario identification, one definition for all four tabs ──────────────────────────────────
   // In comparison mode both scenarios are named (Base first, always, so the two never swap places
   // under the user); otherwise the single active source is named — the loaded scenario, or the live
-  // database. Rendered twice below: centred on Resumo Geral / GETSA / Plano, and in-flow on the
+  // database. Rendered twice below: centred on Resumo Geral / Plano Externo / Plano, and in-flow on the
   // Schedule, whose footer has no free centre to sit in.
   const scenarioItems = comparisonMode
     ? [
@@ -571,7 +569,7 @@ export function GanttModalFooter({
           match: the ACTIVE scenario is the solid red line, the compared one the dashed gray
           line — "Trocar Cenário" swaps both together. Base is always listed first so the two
           names never change position under the user. */}
-      {/* CENTRED variant — Resumo Geral, GETSA Planned and Plano de Produção. All three have a free
+      {/* CENTRED variant — Resumo Geral, Plano Externo and Plano de Produção. All three have a free
           footer centre (a short status span on the left, Exportar/Fechar on the right), so the label
           can be absolutely centred there. The Schedule tab is excluded: its footer is a full toolbar
           from edge to edge, so it gets the in-flow variant a few lines below instead. */}
@@ -960,7 +958,7 @@ export function GanttModalFooter({
         )}
         {/* "Unir locos" — Resumo Geral only. Icon-only square in the same 30×30 idiom as the
             arrows toggle it sits left of: both are view switches for this tab, so they read as a
-            pair. One serial planned under two Tipos (ES442227 + B3#ES442227) counts once, under
+            pair. One serial planned under two Tipos (MX1022 + B3#MX1022) counts once, under
             the Tipo with the most total hours. */}
         {activeTab === 0 && (
           <button
@@ -1049,18 +1047,7 @@ export function GanttModalFooter({
               </div>
             )}
           </div>
-        ) : (
-          <button
-            onClick={handleExport}
-            disabled={exporting || !effectiveData}
-            title="Exportar Gantt para Excel"
-            className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded border font-medium transition-colors hover:bg-gray-100 disabled:opacity-40"
-            style={{ borderColor: RED + 'AA', color: RED }}
-          >
-            {exporting ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-            Exportar
-          </button>
-        )}
+        ) : null}
         <button
           onClick={() => { if (!optLoading) onClose() }}
           disabled={optLoading}

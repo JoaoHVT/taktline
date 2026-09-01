@@ -24,8 +24,16 @@ Thumbs.db
 #    so keep them out of the backend build/image. ─────────
 imagens/
 
-# NOTE: HorasB3.xlsx IS ignored (root .gitignore, `*.xlsx`) and is NOT in the
-# repository. It holds real production data, so keeping it out of Git is
-# deliberate — a previous note here claimed the opposite and was simply wrong.
-# gantt_builder.py falls back to it only when the database is unreachable, so the
-# file must be supplied to the runtime host/image out-of-band (see backend/README.md).
+# ── Demo dataset ────────────────────────────────────────
+# data/demo.sqlite IS committed: it is what the app reads, and it is generated,
+# masked data with nothing real in it (tools/make_demo_data.py + tools/seed_demo_db.py,
+# guarded by tools/check_no_real_names.py).
+#
+# data/demo_source.xlsx is NOT: the root `*.xlsx` rule covers it, and that is the right
+# outcome — the workbook is a reproducible intermediate, and a blanket rule against
+# committing spreadsheets is worth more than the convenience of this one.
+data/demo_source.xlsx
+
+# The working copy the process actually writes at runtime, if it lands here.
+data/*.sqlite-wal
+data/*.sqlite-shm

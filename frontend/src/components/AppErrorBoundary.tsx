@@ -81,7 +81,7 @@ export class AppErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error(`[OptVision] ${this.props.name} crashed:`, error, info.componentStack)
+    console.error(`[Taktline] ${this.props.name} crashed:`, error, info.componentStack)
 
     // A chunk this build cannot fetch any more: nothing in this document can recover it, and
     // retrying would just throw on the same missing file. Reload onto the new build instead.

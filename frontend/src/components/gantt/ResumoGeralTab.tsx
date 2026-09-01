@@ -326,9 +326,9 @@ export function ResumoGeralTab({
   // Build Plan window — reads the Schedule directly and holds no state this tab depends on, so
   // opening or closing it cannot disturb anything here.
   // ── "Unir locos" (optional) ────────────────────────────────────────────────
-  // One physical serial planned under two Tipos (`ES442227` + `B3#ES442227`) folds into a
+  // One physical serial planned under two Tipos (`MX1022` + `B3#MX1022`) folds into a
   // single entry under the Tipo with the most total hours. Applied HERE, at display time, and
-  // only to what this tab reads: the same aggregate is shared with Plano de Produção and GETSA
+  // only to what this tab reads: the same aggregate is shared with Plano de Produção and Plano Externo
   // Planned, which must keep seeing the unmerged split. `mergeSummaryLocoTypes` returns its
   // input untouched when no serial is contested, so the memo stays referentially stable.
   const mergeLocos = useSyncExternalStore(subscribeMergeLocoTypes, getMergeLocoTypes, getMergeLocoTypes)

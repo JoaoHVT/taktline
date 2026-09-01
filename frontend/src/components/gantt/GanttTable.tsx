@@ -32,7 +32,7 @@ function centerDeltaFor(cell: HTMLElement, w: Window): number {
 // Cache-busting version for the /public worker (not handled by Next HMR). Bump this on
 // every change to gantt-table-worker.js so browsers fetch the new worker instead of a
 // stale cached copy. yyyymmddN.
-const WORKER_VERSION = '2026081801'
+const WORKER_VERSION = '2026090101'
 
 /** Expansion state of the Schedule tree, BOTH tiers. Workstation ↔ Componente: `base` is the
  *  bulk default (Expand All = true / Collapse All = false); `exceptions` holds the individually
@@ -293,7 +293,7 @@ export const GanttTable = forwardRef<GanttTableHandle, GanttTableProps>(function
   // The worker used to be created inside that effect, which returns early on `!buildEnabled`. The
   // Schedule chart is deliberately not built when its tab is off, so with Schedule disabled the worker
   // never existed and `computeEffective` — a PURE data RPC that needs no build state at all — silently
-  // resolved with its INPUT. Every non-Schedule tab (Resumo Geral, GETSA, Plano de Produção) therefore
+  // resolved with its INPUT. Every non-Schedule tab (Resumo Geral, Plano Externo, Plano de Produção) therefore
   // rendered the untouched DB plan with zero overrides applied and showed no deviations, while loading
   // the Schedule tab once created the worker as a side effect and "fixed" it for the rest of the session.
   // Creating the worker on demand decouples the override/scenario computation from the chart's render

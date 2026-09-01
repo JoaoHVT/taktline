@@ -26,7 +26,7 @@ export default function GlobalError({
   const [reloading, setReloading] = useState(stale)
   const [showDetails, setShowDetails] = useState(false)
 
-  useEffect(() => { console.error('[OptVision] root error:', error) }, [error])
+  useEffect(() => { console.error('[Taktline] root error:', error) }, [error])
   useEffect(() => {
     // Declined → a reload was already tried and did not help, so this is something else.
     if (stale && !reloadForStaleBuild()) setReloading(false)

@@ -1,5 +1,5 @@
 // ── Working-hours gate for background pollers ────────────────────────────────
-// Railway's sleep is activity-based: ANY request resets a 10-minute idle timer.
+// the host's sleep is activity-based: ANY request resets a 10-minute idle timer.
 // The keepalive cron (see /keepalive) pings only during working hours so the
 // backend sleeps nights and weekends.
 //
@@ -30,14 +30,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000'
 
 /** A backend that CAN'T sleep: localhost, or the LAN IP start.py writes into .env for device
  *  testing. Gating those would park the status dots on 'sleeping' at 19:00 while the server is
- *  plainly running and serving requests — the window only ever meant "let RAILWAY sleep".
+ *  plainly running and serving requests — the window only ever meant "let the HOST sleep".
  *  Unparseable → treat as local (never gate): failing open costs a poll, failing closed lies. */
 export function isLocalApi(apiUrl: string = API_URL): boolean {
   let host: string
   try { host = new URL(apiUrl).hostname.replace(/^\[|\]$/g, '') } catch { return true }
   if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true
   // mDNS name of a machine on this LAN (https://<pc>.local, the Caddy front door).
-  // Same reasoning as the private ranges above: it can't be Railway, so it can't sleep.
+  // Same reasoning as the private ranges above: it can't be the host, so it can't sleep.
   if (host.endsWith('.local')) return true
   return /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)
 }
@@ -88,7 +88,7 @@ export function shouldPollNow(now: Date = new Date()): boolean {
 // so within this window of a genuine request we let the status/admin pollers probe for
 // the TRUE state instead of parking on 'sleeping'/hidden. Kept SHORTER than the 5-min
 // poll interval, so once the user goes idle, activity lapses before the next beat and
-// polling stops on its own (letting Railway sleep). Background pollers' own requests are
+// polling stops on its own (letting the host sleep). Background pollers' own requests are
 // excluded from the activity signal (api.ts config._backgroundPoll), so this can't
 // perpetuate itself.
 export const RECENT_ACTIVITY_MS = 3 * 60 * 1000
@@ -118,7 +118,7 @@ export function shouldPollOrActive(lastContactAt: number, now: number = Date.now
 //     already awake and someone is watching. Polling fast here costs nothing extra:
 //     the user's own requests are holding the sleep timer open regardless.
 //   • IDLE — nobody is doing anything. Fall back to the slow beat, which combined
-//     with the visibility + window gates is what lets Railway actually sleep.
+//     with the visibility + window gates is what lets the host actually sleep.
 //
 // Because activity is measured from REAL traffic only (background polls are excluded
 // via api.ts _backgroundPoll), the fast cadence lapses on its own ~3 min after the

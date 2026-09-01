@@ -5,7 +5,6 @@ Extraído de gantt_special_line.py para uso via API (main.py).
 
 Funções públicas:
   build_gantt_data()   → dict  (payload JSON para o frontend)
-  build_gantt_excel()  → bytes (arquivo .xlsx em memória)
 """
 
 from __future__ import annotations
@@ -46,13 +45,6 @@ def _add_business_days(start: date, n: int, holidays: frozenset = frozenset()) -
     return cur
 
 
-def _business_days_range(start: date, n_days: int, holidays: frozenset = frozenset()) -> list[date]:
-    days, cur = [], start
-    while len(days) < n_days:
-        if cur.weekday() < 5 and cur not in holidays:
-            days.append(cur)
-        cur += timedelta(days=1)
-    return days
 
 
 def _business_days_between(start: date, end: date, holidays: frozenset = frozenset()) -> int:
@@ -471,10 +463,6 @@ def _strip_acc(s: str) -> str:
 # ── Leitura dos dados ─────────────────────────────────────────────────────────
 
 _HERE        = os.path.dirname(os.path.abspath(__file__))
-EXCEL_FILE   = os.path.join(_HERE, "HorasB3.xlsx")
-OUTPUT_FILE  = os.path.join(_HERE, "gantt_output.xlsx")
-_SHEETS_MS   = ["Schedule - MS", "Special Line - MS", "Special Line - MS (2)"]
-_SHEETS_ROUT = ["Locos - Rout", "Locos Rout", "Locos - Rout."]
 
 
 def _row_json_takt(row_json: str | None):
@@ -503,8 +491,7 @@ def _row_json_takt(row_json: str | None):
 
 
 def _load_source_data() -> tuple[dict, list]:
-    """Lê dados do banco (preferencial) ou Excel (fallback).
-    Retorna (ms_by_wo, rt_rows)."""
+    """Le os dados de Schedule e Locos Rout do banco. Retorna (ms_by_wo, rt_rows)."""
     ms_by_wo: dict = defaultdict(list)
     rt_rows: list  = []
 
@@ -573,135 +560,58 @@ def _load_source_data() -> tuple[dict, list]:
                         })
                         _valid += 1
                     if _valid == 0:
-                        import logging as _log
-                        _log.getLogger(__name__).warning(
-                            "[gantt_builder] DB schedule has %d rows but all have empty WO — "
-                            "falling back to HorasB3.xlsx", sr_count)
-                        ms_by_wo.clear()
-                    elif lr_count > 0:
-                        # PART DESC / ESCOPO / LINHA are Plano-de-Produção pass-through only —
-                        # nothing in the scheduling maths reads them (see _build_records).
-                        rt_rows = [["LOCOMOTIVA", "PART NUMBER", "WORKSTATION", "SUBAREA", "AREA",
-                                     "HH UNIT", "QTD", "DURACAO", "INICIO", "DESCRIÇÃO", "WORKORDER",
-                                     "PART DESC", "ESCOPO", "LINHA"]]
-                        for _r in _lr_rows:
-                            rt_rows.append([
-                                getattr(_r, 'locomotiva',  '') or '',
-                                getattr(_r, 'part_number', '') or '',
-                                getattr(_r, 'workstation', '') or '',
-                                getattr(_r, 'subarea',     '') or '',
-                                getattr(_r, 'area',        '') or '',
-                                getattr(_r, 'hh_unit',      0) or 0,
-                                getattr(_r, 'qtd',          0) or 0,
-                                getattr(_r, 'duracao',     '') or '',
-                                getattr(_r, 'inicio',      '') or '',
-                                getattr(_r, 'descricao',   '') or '',
-                                getattr(_r, 'workorder',   '') or '',
-                                getattr(_r, 'part_desc',   '') or '',
-                                getattr(_r, 'escopo',      '') or '',
-                                getattr(_r, 'linha',       '') or '',
-                            ])
-                        return ms_by_wo, rt_rows
-                    else:
-                        # schedule rows present but no routing — return empty Gantt (no fallback)
+                        raise RuntimeError(
+                            "A tabela schedule tem {} linhas, mas nenhuma com WORKORDER "
+                            "preenchida.".format(sr_count)
+                        )
+                    if lr_count == 0:
+                        # schedule rows present but no routing -> empty Gantt, not an error
                         return ms_by_wo, []
-                # DB returned 0 valid schedule rows — fall through to Excel fallback
-                if not ms_by_wo:
-                    import logging as _log
-                    _msg = "schedule={}, locos_rout={}".format(sr_count, lr_count)
-                    if _db_error:
-                        _msg += ", erro: {}".format(_db_error)
-                    _log.getLogger(__name__).warning(
-                        "[gantt_builder] DB sem dados válidos para o Gantt (%s) — "
-                        "ativando fallback HorasB3.xlsx", _msg)
+                    # PART DESC / ESCOPO / LINHA are pass-through only - nothing in the
+                    # scheduling maths reads them (see _build_records).
+                    rt_rows = [["LOCOMOTIVA", "PART NUMBER", "WORKSTATION", "SUBAREA", "AREA",
+                                "HH UNIT", "QTD", "DURACAO", "INICIO", "DESCRICAO", "WORKORDER",
+                                "PART DESC", "ESCOPO", "LINHA"]]
+                    for _r in _lr_rows:
+                        rt_rows.append([
+                            getattr(_r, 'locomotiva',  '') or '',
+                            getattr(_r, 'part_number', '') or '',
+                            getattr(_r, 'workstation', '') or '',
+                            getattr(_r, 'subarea',     '') or '',
+                            getattr(_r, 'area',        '') or '',
+                            getattr(_r, 'hh_unit',      0) or 0,
+                            getattr(_r, 'qtd',          0) or 0,
+                            getattr(_r, 'duracao',     '') or '',
+                            getattr(_r, 'inicio',      '') or '',
+                            getattr(_r, 'descricao',   '') or '',
+                            getattr(_r, 'workorder',   '') or '',
+                            getattr(_r, 'part_desc',   '') or '',
+                            getattr(_r, 'escopo',      '') or '',
+                            getattr(_r, 'linha',       '') or '',
+                        ])
+                    return ms_by_wo, rt_rows
+    except RuntimeError:
+        raise
     except Exception as _exc:
-        import logging as _log
-        _log.getLogger(__name__).warning(
-            "[gantt_builder] Falha ao ler dados do banco (%s) — ativando fallback HorasB3.xlsx", _exc)
-        _db_error = str(_exc)
-        ms_by_wo.clear()
+        raise RuntimeError("Falha ao ler os dados do banco: {}".format(_exc))
 
-    # ── Fallback: HorasB3.xlsx ─────────────────────────────────────────────────
-    # Reached when: DB not configured, DB query failed, or DB returned no valid rows.
-    if not os.path.exists(EXCEL_FILE):
-        if _db_error:
-            raise RuntimeError(
-                "Banco de dados indisponível ({}) e arquivo Excel não encontrado: {}. "
-                "Importe os dados via POST /api/db/import/schedule e POST /api/db/import/locos-rout, "
-                "ou adicione HorasB3.xlsx ao servidor.".format(_db_error, EXCEL_FILE)
-            )
-        raise FileNotFoundError("Arquivo Excel não encontrado: {}".format(EXCEL_FILE))
-    import openpyxl as _opx
-    wb = _opx.load_workbook(EXCEL_FILE, read_only=True, data_only=True)
-    _available_sheets = list(wb.sheetnames)
-
-    _sm_sheet = next((s for s in _SHEETS_MS   if s in _available_sheets), None)
-    _rt_sheet = next((s for s in _SHEETS_ROUT if s in _available_sheets), None)
-
-    if _sm_sheet is None or _rt_sheet is None:
-        _missing = []
-        if _sm_sheet is None:
-            _missing.append(f"schedule ({'/'.join(_SHEETS_MS)})")
-        if _rt_sheet is None:
-            _missing.append(f"locos-rout ({'/'.join(_SHEETS_ROUT)})")
-        wb.close()
-        raise FileNotFoundError(
-            f"O arquivo {EXCEL_FILE} não contém as abas de Gantt: {', '.join(_missing)}. "
-            f"Abas presentes: {_available_sheets}. "
-            "Importe os dados do Schedule via /api/db/import/schedule e /api/db/import/locos-rout."
-        )
-
-    ws_ms   = wb[_sm_sheet]
-    ms_rows = list(ws_ms.iter_rows(values_only=True))
-    ms_hdr  = [_norm(c) for c in ms_rows[0]]
-    i_wo = _find_col_idx(ms_hdr, "Standard WO")
-    i_tn = _find_col_idx(ms_hdr, "Task Name")
-    i_sm = _find_col_idx_any(ms_hdr, "Start MS", "Start")
-    i_tk = _find_col_idx(ms_hdr, "Takt")
-    i_ln = _find_col_idx_any(ms_hdr, "Linha", "Line")
-    i_fn = _find_col_idx_any(ms_hdr, "Finish MS", "Finish")
-    i_ct = _find_col_idx_any(ms_hdr, "Contratual", "Contractual", "Data Contratual")
-    for row in ms_rows[1:]:
-        wo = _norm(row[i_wo])
-        if not wo:
-            continue
-        # Start MS is optional (Finish-only rows schedule backward) — a missing column or a
-        # short row yields no start, which the builder reads as "solve it from Finish MS".
-        raw = row[i_sm] if i_sm >= 0 and len(row) > i_sm else None
-        _sm_str = _parse_excel_date_raw(raw)
-        start_dt: date | None = None
-        if _sm_str:
-            try:
-                start_dt = date.fromisoformat(_sm_str[:10])
-            except Exception:
-                pass
-        fn_str = _parse_excel_date_raw(row[i_fn] if i_fn >= 0 and len(row) > i_fn else None)
-        _tk_val = _safe_float(row[i_tk])
-        ms_by_wo[wo].append({
-            "task_name": _norm(row[i_tn]),
-            "start_ms":  start_dt,
-            "takt":      _tk_val or 1.0,
-            "takt_raw":  _tk_val,
-            "linha":     _norm(row[i_ln]) if i_ln >= 0 and len(row) > i_ln and row[i_ln] is not None else "",
-            "finish_ms": fn_str,
-            "contract_ms": _parse_excel_date_raw(row[i_ct] if i_ct >= 0 and len(row) > i_ct else None),
-        })
-
-    ws_rt  = wb[_rt_sheet]
-    rt_rows = list(ws_rt.iter_rows(values_only=True))
-    wb.close()
-    return ms_by_wo, rt_rows
+    if not _db_configured:
+        raise RuntimeError("Banco de dados nao configurado.")
+    raise RuntimeError(
+        "O banco nao tem dados de schedule para montar o Gantt."
+        + (" Ultimo erro: {}".format(_db_error) if _db_error else "")
+    )
 
 
 # ── Locomotive model fallback ──────────────────────────────────────────────────────
 # When a scheduled model is a NEW VARIANT of a real locomotive family but has no routing of
-# its own (e.g. "ES44 BANANA" with no rows), it borrows the routing of an existing model that
-# shares its family PREFIX (e.g. "ES44 BRADO"). This keeps hours/kits/protections/inventory/
+# its own (e.g. "MX10 BANANA" with no rows), it borrows the routing of an existing model that
+# shares its family PREFIX (e.g. "MX10 BRADO"). This keeps hours/kits/protections/inventory/
 # optimization consistent for genuine model variants.
 #
 # Fallback is DELIBERATELY narrow — it fires ONLY when ALL of these hold:
 #   (1) the value's prefix is a RECOGNIZED locomotive-model family (model-code shaped, e.g.
-#       ES44 / ES58 / AC44, or a known family like BBWi);
+#       MX10 / MX20 / AB30);
 #   (2) the exact model has no routing of its own;
 #   (3) a compatible model with the SAME recognized prefix DOES have routing; and
 #   (4) that model is scheduled under the SAME Type (Tipo Geral) as the record asking for it.
@@ -711,15 +621,15 @@ def _load_source_data() -> tuple[dict, list]:
 # "any available" last-resort fallbacks are gone: they let unrelated text borrow real hours.)
 #
 # (4) exists because a shared prefix does NOT imply a shared Type: the same family can be
-# scheduled as Propulsion and as New Locos, and borrowing across that boundary gives a
-# Propulsion record a New Locos routing — wrong hours, kits and protections. A candidate
+# scheduled under two different Tipos, and borrowing across that boundary gives a record the
+# other Tipo's routing — wrong hours, kits and protections. A candidate
 # whose Type cannot be established (routed but never scheduled) is rejected for the same
 # reason: same-Type must be proven, not assumed. With no eligible same-Type model the
 # record stays unresolved, exactly as if no candidate existed at all.
 #
 # All of the matching above is CASE/ACCENT-INSENSITIVE: every model name is reduced to a
 # canonical _model_key (trimmed, accent-stripped, uppercased) before any lookup, so
-# 'BBI43' / 'Bbi43' / 'bbi43' are one model everywhere (own-routing, prefix index and the
+# 'MX10 A' / 'Mx10 a' / 'mx10 a' are one model everywhere (own-routing, prefix index and the
 # same-Type index alike) and a valid match can never fail on capitalization differences.
 
 # Type ("Tipo Geral") of a scheduled LOCO, derived from its Schedule "Linha" — the same
@@ -738,19 +648,17 @@ def _tipo_geral(linha: str) -> str:
 
 
 # A recognized model-family prefix is model-code shaped: one or more letters immediately
-# followed by digits (ES44, ES58, AC44, AC45, SD70, …). Pure text (BANANA/SETUP/TEST) and
-# pure numbers ("2027") have no such shape. A short allowlist covers known families that do
-# not follow the letter+digit shape (e.g. BBWi).
+# followed by digits (MX10, MX20, AB30, …). Pure text (BANANA/SETUP/TEST) and pure numbers
+# ("2027") have no such shape.
 _MODEL_PREFIX_RE = re.compile(r"^[A-Z]{1,4}\d{2,4}")
-_KNOWN_MODEL_FAMILIES = {"BBWI"}
 
 
 def _model_key(model: Any) -> str:
     """Canonical model-matching key: trimmed, accent-stripped, UPPERCASED.
 
     ALL model matching (own-routing lookup, prefix index, same-Type index and the
-    fallback resolution built on them) goes through this key, so 'BBI43', 'Bbi43'
-    and 'bbi43' are the same model — a valid match must never fail on casing."""
+    fallback resolution built on them) goes through this key, so 'MX10 A', 'Mx10 a'
+    and 'mx10 a' are the same model — a valid match must never fail on casing."""
     return _strip_acc(_norm(model))
 
 
@@ -761,7 +669,7 @@ def _model_prefix(model: str) -> str:
 
 def _is_recognized_model_prefix(pfx: str) -> bool:
     """True only for a model-code-shaped family prefix; rejects blank/arbitrary/label text."""
-    return bool(pfx) and (bool(_MODEL_PREFIX_RE.match(pfx)) or pfx in _KNOWN_MODEL_FAMILIES)
+    return bool(_MODEL_PREFIX_RE.match(pfx))
 
 
 def _resolve_fallback_model(
@@ -855,7 +763,7 @@ def _build_records(ms_by_wo: dict, rt_rows: list) -> list[dict]:
 
     # Pre-group routing rows by WO to avoid O(WOs × R) scan inside the loop.
     # Each WO lookup is now O(1) instead of scanning the full rt_rows list.
-    # Keys are canonical _model_key values, so 'BBI43' / 'Bbi43' / 'bbi43' land in the
+    # Keys are canonical _model_key values, so 'MX10 A' / 'Mx10 a' / 'mx10 a' land in the
     # same routing group and Schedule↔routing matching never fails on casing alone.
     # rout_display keeps the first original spelling per key for logs and the UI field.
     _t0 = time.perf_counter()
@@ -1779,696 +1687,15 @@ def build_gantt_data() -> dict:
     return _assemble_gantt_output(ms_by_wo, rt_rows)
 
 
-def build_gantt_data_from_scenario_excel(file_bytes: bytes) -> dict:
-    """Build Gantt data from uploaded Schedule-MS Excel, using DB LocosRout."""
-    import io as _io
-    import openpyxl as _opx
-    wb = _opx.load_workbook(_io.BytesIO(file_bytes), read_only=True, data_only=True)
-    _available = list(wb.sheetnames)
-    _sm_sheet = next((s for s in _SHEETS_MS if s in _available), None)
-    if _sm_sheet is None:
-        raise ValueError(
-            f"Aba Schedule não encontrada. Esperado: {_SHEETS_MS}. Disponível: {_available}"
-        )
-    ws_ms = wb[_sm_sheet]
-    ms_rows = list(ws_ms.iter_rows(values_only=True))
-    if not ms_rows:
-        raise ValueError("Planilha Schedule - MS está vazia.")
-    ms_hdr = [_norm(c) for c in ms_rows[0]]
-    # Accent/case-insensitive column matching with PT/EN fallbacks (Start→Início,
-    # Finish→Término). Errors list only the missing required columns, not the sheet's.
-    _cols = _resolve_scenario_columns(ms_hdr)
-    i_wo, i_tn, i_sm, i_tk, i_ln, i_fn, i_ct = (
-        _cols["wo"], _cols["tn"], _cols["sm"], _cols["tk"], _cols["ln"], _cols["fn"], _cols["ct"])
-    ms_by_wo: dict = defaultdict(list)
-    for row in ms_rows[1:]:
-        wo = _norm(row[i_wo]) if len(row) > i_wo else ""
-        if not wo:
-            continue
-        raw = row[i_sm] if i_sm >= 0 and len(row) > i_sm else None
-        # Use _parse_excel_date_raw for Start MS to handle datetime objects, date objects,
-        # Excel serial-number floats (common in openpyxl read_only mode), and ISO strings.
-        # Without this, serial-number cells yield start_dt=None, causing data_calc=None
-        # and skipping the Protection Days duration override entirely.
-        _sm_str = _parse_excel_date_raw(raw)
-        start_dt: date | None = None
-        if _sm_str:
-            try:
-                start_dt = date.fromisoformat(_sm_str[:10])
-            except Exception:
-                pass
-        # _parse_excel_date_raw handles datetime objects, Excel serial floats, and plain strings
-        _fn_raw = row[i_fn] if i_fn >= 0 and len(row) > i_fn else None
-        fn_str = _parse_excel_date_raw(_fn_raw)
-        _tk_val = _safe_float(row[i_tk]) if len(row) > i_tk else None
-        ms_by_wo[wo].append({
-            "task_name": _norm(row[i_tn]) if len(row) > i_tn else "",
-            "start_ms":  start_dt,
-            "takt":      _tk_val or 1.0,
-            "takt_raw":  _tk_val,
-            "linha":     _norm(row[i_ln]) if i_ln >= 0 and len(row) > i_ln else "",
-            "finish_ms": fn_str,
-            "contract_ms": _parse_excel_date_raw(row[i_ct] if i_ct >= 0 and len(row) > i_ct else None),
-        })
-    wb.close()
-    # Load LocosRout from DB
-    rt_rows: list = []
-    try:
-        from database import get_db
-        from models import LocosRout as _LR, get_active_ver as _gav
-        with get_db() as _db:
-            _lr_ver  = _gav(_db, "locos_rout")
-            _lr_rows = _db.query(_LR).filter(_LR.ver == _lr_ver).all()
-            if _lr_rows:
-                # WORKORDER must be included here too: the Plano de Produ\u00e7\u00e3o view concatenates
-                # LOCO-WORKORDER, and without this column a scenario-loaded schedule shows only
-                # the loco (no concatenation).
-                #
-                # PART DESC / ESCOPO / LINHA went exactly the same way, and are the DESCRICAO,
-                # ESCOPO and LINHA columns of that same view. Like WORKORDER they are pass-through
-                # only - nothing in the scheduling maths reads them (see _build_records) - so they
-                # are easy to leave out of a header without breaking anything except the screen
-                # that displays them, where the column simply comes out blank. A scenario is the
-                # same schedule read from another workbook, so its grid has to come out identical
-                # to a normal load: EVERY column the view reads must be listed here.
-                #
-                # Keep in step with the normal DB path (_load_source_data) and the export path
-                # (build_gantt_excel_from_scenario) - all three read the same LocosRout table.
-                rt_rows = [["LOCOMOTIVA", "PART NUMBER", "WORKSTATION", "SUBAREA", "AREA",
-                             "HH UNIT", "QTD", "DURACAO", "INICIO", "DESCRI\u00c7\u00c3O", "WORKORDER",
-                             "PART DESC", "ESCOPO", "LINHA"]]
-                for _r in _lr_rows:
-                    rt_rows.append([
-                        getattr(_r, "locomotiva",  "") or "",
-                        getattr(_r, "part_number", "") or "",
-                        getattr(_r, "workstation", "") or "",
-                        getattr(_r, "subarea",     "") or "",
-                        getattr(_r, "area",        "") or "",
-                        getattr(_r, "hh_unit",     0)  or 0,
-                        getattr(_r, "qtd",         0)  or 0,
-                        getattr(_r, "duracao",     "") or "",
-                        getattr(_r, "inicio",      "") or "",
-                        getattr(_r, "descricao",   "") or "",
-                        getattr(_r, "workorder",   "") or "",
-                        getattr(_r, "part_desc",   "") or "",
-                        getattr(_r, "escopo",      "") or "",
-                        getattr(_r, "linha",       "") or "",
-                    ])
-    except Exception:
-        pass
-    if not rt_rows:
-        raise RuntimeError(
-            "LocosRout não encontrado no banco. "
-            "Importe a tabela de roteamento antes de usar Simular Cenário."
-        )
-    return _assemble_gantt_output(ms_by_wo, rt_rows)
 
 
-def build_gantt_excel(
-    date_from: str | None = None,
-    date_to: str | None = None,
-    lines: list[str] | None = None,
-    _ms_by_wo=None,
-    _rt_rows=None,
-) -> bytes:
-    """
-    Gera o Excel do Gantt e retorna como bytes (em memória).
-    Idêntico ao gantt_special_line.py mas não salva em disco.
-    Aceita ms_by_wo/_rt_rows pré-carregados (para exportação de cenário).
-    """
-    import openpyxl
-    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-
-    if _ms_by_wo is not None and _rt_rows is not None:
-        ms_by_wo, rt_rows = _ms_by_wo, _rt_rows
-    else:
-        ms_by_wo, rt_rows = _load_source_data()
-    records = _filter_records(_build_records(ms_by_wo, rt_rows), date_from, date_to, lines)
-    if not records:
-        raise ValueError("Nenhum dado encontrado para gerar o Gantt.")
-
-    all_days_set = {r["day"] for r in records}
-    min_date = min(all_days_set)
-    max_date = max(all_days_set)
-    all_dates: list[date] = []
-    d = min_date
-    while d <= max_date:
-        all_dates.append(d)
-        d += timedelta(days=1)
-
-    pair_ws: dict[tuple, list[str]]  = {}
-    cell_data: dict[tuple, dict]     = {}
-    ws_first_date: dict[tuple, date] = {}
-
-    for r in records:
-        pk  = (r["wo"], r["task_name"])
-        wdk = (r["wo"], r["task_name"], r["ws"], r["day"])
-        wfk = (r["wo"], r["task_name"], r["ws"])
-        if pk not in pair_ws:
-            pair_ws[pk] = []
-        if r["ws"] not in pair_ws[pk]:
-            pair_ws[pk].append(r["ws"])
-        if wdk not in cell_data:
-            cell_data[wdk] = {"sa": r["sa"], "hh": 0.0}
-        cell_data[wdk]["hh"] += r["hh_dia"]
-        if wfk not in ws_first_date or r["day"] < ws_first_date[wfk]:
-            ws_first_date[wfk] = r["day"]
-
-    for pk in pair_ws:
-        pair_ws[pk].sort(key=lambda ws: ws_first_date.get((pk[0], pk[1], ws), date.max))
-
-    FW_DARK  = ["4472C4","70AD47","ED7D31","FFC000","5B9BD5","A9D18E","F4B942","8FAADC"]
-    FW_LIGHT = ["DEEAF1","E2EFDA","FCE4D6","FFF2CC","D9E1F2","E9F5E1","FFF0CB","EEF3FB"]
-    WEEKEND_FILL  = PatternFill("solid", fgColor="EBEBEB")
-    HDR_FILL      = PatternFill("solid", fgColor="D6DCE4")
-    ROW_EVEN_FILL = PatternFill("solid", fgColor="F2F2F2")
-    ROW_ODD_FILL  = PatternFill("solid", fgColor="FFFFFF")
-    BOLD9  = Font(bold=True, size=9)
-    BOLD8  = Font(bold=True, size=8)
-    CELL8  = Font(size=8)
-    WHITE9 = Font(bold=True, size=9, color="FFFFFF")
-    CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    LEFT   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
-    thin   = Side(style="thin", color="BFBFBF")
-    BORDER = Border(left=thin, right=thin, top=thin, bottom=thin)
-    DOW_PT = ["Seg","Ter","Qua","Qui","Sex","Sab","Dom"]
-    COL_OFFSET = 4
-
-    # Fiscal-week header groups come from the SHARED, override-aware calendar (the same
-    # _semana_fw the on-screen Gantt uses) — NOT ISO week numbers — so the export matches the
-    # app and honors admin fiscal-week overrides (e.g. 2027 FW01 starting Jan 4). A new group
-    # begins whenever the FW label changes along the date axis, which keeps each run contiguous
-    # even when a label legitimately recurs across a year boundary.
-    fw_gid: list[int] = []              # fiscal-week group id per date index
-    fw_gid_label: dict[int, str] = {}   # group id → override-aware FW label (e.g. "FW01")
-    _gid = -1
-    _prev_lab: str | None = None
-    for d in all_dates:
-        lab = _semana_fw(d)
-        if lab != _prev_lab:
-            _gid += 1
-            fw_gid_label[_gid] = lab
-            _prev_lab = lab
-        fw_gid.append(_gid)
-
-    wb_out   = openpyxl.Workbook()
-    ws_gantt = wb_out.active
-    ws_gantt.title = "Gantt"
-    ws_gantt.row_dimensions[1].height = 18
-
-    for col_letter, val in [("A","FW"), ("B","MODELO"), ("C","LOCO"), ("D","WS")]:
-        c = ws_gantt[f"{col_letter}1"]
-        c.value = val; c.font = BOLD9; c.alignment = CENTER; c.fill = HDR_FILL
-
-    fw_col_groups: dict = defaultdict(list)
-    for i, d in enumerate(all_dates):
-        fw_col_groups[fw_gid[i]].append(COL_OFFSET + 1 + i)
-
-    for gid, cols in fw_col_groups.items():
-        dark_fill = PatternFill("solid", fgColor=FW_DARK[gid % len(FW_DARK)])
-        first, last = cols[0], cols[-1]
-        ws_gantt.cell(1, first).value     = fw_gid_label[gid]
-        ws_gantt.cell(1, first).font      = WHITE9
-        ws_gantt.cell(1, first).fill      = dark_fill
-        ws_gantt.cell(1, first).alignment = CENTER
-        if first != last:
-            ws_gantt.merge_cells(start_row=1, start_column=first, end_row=1, end_column=last)
-        # Do NOT set fill on merged cells — raises AttributeError in openpyxl
-
-    ws_gantt.row_dimensions[2].height = 28
-    for col_letter, val in [("A","LINHA"), ("B","MODELO"), ("C","LOCO"), ("D","WORKSTATION")]:
-        c = ws_gantt[f"{col_letter}2"]
-        c.value = val; c.font = BOLD9; c.alignment = CENTER
-        c.fill = HDR_FILL; c.border = BORDER
-
-    for i, d in enumerate(all_dates):
-        col = COL_OFFSET + 1 + i
-        dow = DOW_PT[d.weekday()]
-        c   = ws_gantt.cell(2, col, f"{d.strftime('%d/%m')}\n{dow}")
-        c.font = BOLD8; c.alignment = CENTER; c.border = BORDER
-        c.fill = WEEKEND_FILL if d.weekday() >= 5 else HDR_FILL
-
-    current_row = 3
-    for group_idx, (wo, task_name) in enumerate(pair_ws.keys()):
-        ws_list   = pair_ws[(wo, task_name)]
-        n_ws      = len(ws_list)
-        start_row = current_row
-        is_even   = group_idx % 2 == 1
-        bg_fill   = ROW_EVEN_FILL if is_even else ROW_ODD_FILL
-
-        for ws_idx, ws_name in enumerate(ws_list):
-            r = current_row
-            ws_gantt.row_dimensions[r].height = 28
-            first_in_group = (ws_idx == 0)
-            for col_num, val in [
-                (1, ""),
-                (2, wo        if first_in_group else ""),
-                (3, task_name if first_in_group else ""),
-                (4, ws_name),
-            ]:
-                c = ws_gantt.cell(r, col_num, val)
-                c.font = BOLD8
-                c.alignment = CENTER if col_num == 1 else LEFT
-                c.border = BORDER; c.fill = bg_fill
-
-            for i, d in enumerate(all_dates):
-                col = COL_OFFSET + 1 + i
-                c   = ws_gantt.cell(r, col)
-                c.border = BORDER
-                if d.weekday() >= 5:
-                    c.fill = WEEKEND_FILL; continue
-                key = (wo, task_name, ws_name, d)
-                if key in cell_data:
-                    data = cell_data[key]
-                    c.value     = f"{data['sa']}\n{data['hh']:.1f}h"
-                    c.font      = CELL8; c.alignment = CENTER
-                    c.fill      = PatternFill("solid", fgColor=FW_LIGHT[fw_gid[i] % len(FW_LIGHT)])
-                else:
-                    c.fill = bg_fill
-            current_row += 1
-
-        if n_ws > 1:
-            end_row = start_row + n_ws - 1
-            for col_num in [1, 2, 3]:
-                ws_gantt.merge_cells(
-                    start_row=start_row, start_column=col_num,
-                    end_row=end_row,     end_column=col_num,
-                )
-                ws_gantt.cell(start_row, col_num).alignment = Alignment(
-                    horizontal="left" if col_num >= 2 else "center",
-                    vertical="center", wrap_text=True,
-                )
-
-    ws_gantt.column_dimensions["A"].width = 7
-    ws_gantt.column_dimensions["B"].width = 22
-    ws_gantt.column_dimensions["C"].width = 13
-    ws_gantt.column_dimensions["D"].width = 12
-    for i, d in enumerate(all_dates):
-        letter = get_column_letter(COL_OFFSET + 1 + i)
-        ws_gantt.column_dimensions[letter].width = 5 if d.weekday() >= 5 else 15
-    ws_gantt.freeze_panes = "E3"
-
-    buf = io.BytesIO()
-    wb_out.save(buf)
-    return buf.getvalue()
 
 
 # Workstation color palette — MUST match the Schedule worker's WS_COLORS so the export
 # looks like the on-screen Gantt (gantt-table-worker.js). Hex without leading '#'.
-_WS_COLORS_HEX = [
-    "DCEEFB", "DDF3D4", "FCE4D6", "FFF3C4",
-    "E0D4F5", "D4F0E8", "FFF0CB", "F2DFF8",
-    "FFE5EC", "E8F5E9", "FFF8E1", "E3F2FD",
-    "F3E5F5", "E0F7FA", "FFF3E0", "EDE7F6",
-    "FDECEA", "E8EAF6", "F9FBE7", "FCE4EC",
-]
 
 
-def _ws_sub_label(ws: str, subarea: str | None, sep: str = "-") -> str:
-    """Mirror the worker's wsSubLabel: 'WS - SUBAREA', or just WS when equal/empty."""
-    w = str(ws or "")
-    s = str(subarea or "")
-    if not s:
-        return w
-    if w.strip().lower() == s.strip().lower():
-        return w
-    return f"{w} {sep} {s}"
 
 
-def build_gantt_excel_from_view(
-    groups: list[dict],
-    date_info: list[dict],
-    mode: str = "full",
-    color_by_ws: bool = True,
-) -> bytes:
-    """
-    Render the Excel export from the EXACT data currently shown in the Schedule
-    (the frontend's effectiveData), honoring the active view mode so the export
-    matches the screen 1:1.
-
-    - groups:    [{ linha, wo, task_name, start_ms?, workstations:[{ ws, subarea?,
-                   desc_rows:[{ desc, cells:{ iso:{ hh } } }] }] }]
-    - date_info: [{ iso, label, dow, fw, is_weekend }] — the rendered day columns.
-    - mode:      'full' | 'ws' (WORK) | 'loco' — grouping/aggregation, identical to
-                 the worker:
-                   FULL → one row per (WS, descrição); cell = descrição + hours.
-                   WORK → one row per WS; cell = aggregated hours of that WS that day.
-                   LOCO → one row per LOCO; cell = total aggregated hours that day.
-    - color_by_ws: cell fill uses the WS color palette (matches on-screen colorByWs).
-
-    OPERATIONAL DATA ONLY — no conflict/check/PD/displacement/bottleneck icons, no
-    hatched displacement boxes, no PD/conflict/hours MODELO annotations, no Saturday
-    red-X markers. Those are UI-only overlays and are intentionally excluded here.
-    A Saturday cell that actually carries an allocation renders as a normal box.
-    """
-    import openpyxl
-    from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
-    from openpyxl.utils import get_column_letter
-
-    mode = (mode or "full").lower()
-    dates = list(date_info or [])
-    if not groups or not dates:
-        raise ValueError("Nenhum dado encontrado para gerar o Gantt.")
-
-    # WS color index — assigned in first-seen order across all groups (matches the
-    # worker's buildWsIndex). FW light fallback when color_by_ws is off.
-    FW_LIGHT = ["DCEEFB", "DDF3D4", "FCE4D6", "FFF3C4", "E0D4F5", "D4F0E8", "FFF0CB", "F2DFF8"]
-    ws_index: dict[str, int] = {}
-    for g in groups:
-        for w in g.get("workstations", []):
-            wname = w.get("ws", "")
-            if wname not in ws_index:
-                ws_index[wname] = len(ws_index) % len(_WS_COLORS_HEX)
-    fw_index: dict[str, int] = {}
-    for d in dates:
-        fw = d.get("fw", "")
-        if fw not in fw_index:
-            fw_index[fw] = len(fw_index) % len(FW_LIGHT)
-
-    def _cell_fill(ws_name: str, fw: str) -> PatternFill:
-        if color_by_ws:
-            return PatternFill("solid", fgColor=_WS_COLORS_HEX[ws_index.get(ws_name, 0)])
-        return PatternFill("solid", fgColor=FW_LIGHT[fw_index.get(fw, 0)])
-
-    WEEKEND_FILL  = PatternFill("solid", fgColor="EBEBEB")
-    HDR_FILL      = PatternFill("solid", fgColor="D6DCE4")
-    ROW_EVEN_FILL = PatternFill("solid", fgColor="F2F2F2")
-    ROW_ODD_FILL  = PatternFill("solid", fgColor="FFFFFF")
-    FW_DARK = ["4472C4", "70AD47", "ED7D31", "FFC000", "5B9BD5", "A9D18E", "F4B942", "8FAADC"]
-    BOLD9  = Font(bold=True, size=9)
-    BOLD8  = Font(bold=True, size=8)
-    CELL8  = Font(size=8)
-    WHITE9 = Font(bold=True, size=9, color="FFFFFF")
-    CENTER = Alignment(horizontal="center", vertical="center", wrap_text=True)
-    LEFT   = Alignment(horizontal="left",   vertical="center", wrap_text=True)
-    thin   = Side(style="thin", color="BFBFBF")
-    BORDER = Border(left=thin, right=thin, top=thin, bottom=thin)
-    COL_OFFSET = 4
-
-    wb_out   = openpyxl.Workbook()
-    ws_gantt = wb_out.active
-    ws_gantt.title = "Gantt"
-    ws_gantt.row_dimensions[1].height = 18
-
-    for col_letter, val in [("A", "FW"), ("B", "MODELO"), ("C", "LOCO"), ("D", "WS")]:
-        c = ws_gantt[f"{col_letter}1"]
-        c.value = val; c.font = BOLD9; c.alignment = CENTER; c.fill = HDR_FILL
-
-    # FW band header (row 1) — one merged dark band per FW run.
-    fw_dark_index: dict[str, int] = {}
-    for d in dates:
-        fw = d.get("fw", "")
-        if fw not in fw_dark_index:
-            fw_dark_index[fw] = len(fw_dark_index) % len(FW_DARK)
-    fw_col_groups: dict = defaultdict(list)
-    for i, d in enumerate(dates):
-        fw_col_groups[d.get("fw", "")].append(COL_OFFSET + 1 + i)
-    for fw, cols in fw_col_groups.items():
-        first, last = cols[0], cols[-1]
-        cc = ws_gantt.cell(1, first)
-        cc.value = str(fw); cc.font = WHITE9
-        cc.fill = PatternFill("solid", fgColor=FW_DARK[fw_dark_index[fw]])
-        cc.alignment = CENTER
-        if first != last:
-            ws_gantt.merge_cells(start_row=1, start_column=first, end_row=1, end_column=last)
-
-    ws_gantt.row_dimensions[2].height = 28
-    for col_letter, val in [("A", "LINHA"), ("B", "MODELO"), ("C", "LOCO"), ("D", "WORKSTATION")]:
-        c = ws_gantt[f"{col_letter}2"]
-        c.value = val; c.font = BOLD9; c.alignment = CENTER; c.fill = HDR_FILL; c.border = BORDER
-
-    for i, d in enumerate(dates):
-        col = COL_OFFSET + 1 + i
-        c = ws_gantt.cell(2, col, f"{d.get('label', '')}\n{d.get('dow', '')}")
-        c.font = BOLD8; c.alignment = CENTER; c.border = BORDER
-        c.fill = WEEKEND_FILL if d.get("is_weekend") else HDR_FILL
-
-    iso_list = [d.get("iso", "") for d in dates]
-    fw_by_iso = {d.get("iso", ""): d.get("fw", "") for d in dates}
-    weekend_by_iso = {d.get("iso", ""): bool(d.get("is_weekend")) for d in dates}
-
-    def _cell_text(info: dict) -> str:
-        # LOCO pre-renders the full multi-WS box text in `text`; FULL/WORK pass a
-        # label (descrição or WS) + hours to format here.
-        if info.get("text") is not None:
-            return info["text"]
-        return f"{info['label']}\n{info['hh']:.1f}h" if info.get("label") else f"{info['hh']:.1f}h"
-
-    def _write_day_cells(r: int, rows_iter, bg_fill):
-        """rows_iter: iso → cell info ({label,hh,ws_name} or {text,ws_name})."""
-        cellmap = rows_iter
-        for i, iso in enumerate(iso_list):
-            col = COL_OFFSET + 1 + i
-            c = ws_gantt.cell(r, col)
-            c.border = BORDER
-            if weekend_by_iso.get(iso):
-                # Weekend stays the normal weekend format UNLESS an allocation lands
-                # here (e.g. Saturday WS40/WS50) — then render it as a normal box.
-                if iso in cellmap:
-                    info = cellmap[iso]
-                    c.value = _cell_text(info)
-                    c.font = CELL8; c.alignment = CENTER
-                    c.fill = _cell_fill(info["ws_name"], fw_by_iso.get(iso, ""))
-                else:
-                    c.fill = WEEKEND_FILL
-                continue
-            if iso in cellmap:
-                info = cellmap[iso]
-                c.value = _cell_text(info)
-                c.font = CELL8; c.alignment = CENTER
-                c.fill = _cell_fill(info["ws_name"], fw_by_iso.get(iso, ""))
-            else:
-                c.fill = bg_fill
-
-    current_row = 3
-    for group_idx, g in enumerate(groups):
-        linha = g.get("linha", "")
-        wo = g.get("wo", "")
-        task_name = g.get("task_name", "")
-        wslist = g.get("workstations", [])
-        is_even = group_idx % 2 == 1
-        bg_fill = ROW_EVEN_FILL if is_even else ROW_ODD_FILL
-        start_row = current_row
-
-        # Build the rows for this group according to the active mode.
-        row_specs: list[tuple[str, dict]] = []  # (ws_label, iso→cell info)
-
-        if mode == "loco":
-            # One row per LOCO. The on-screen LOCO box shows the TOP-2 workstations by
-            # hours that day (each as "WS - SUBAREA" + hours, sorted desc), NOT a single
-            # total. Mirror that exactly: per day, sum hours per WS, take the top 2, and
-            # render them stacked top→bottom in the same order ("WS  h\nWS  h").
-            per_day_ws: dict[str, dict[str, dict]] = {}  # iso → { rawWs → {hh, label} }
-            for w in wslist:
-                wname = w.get("ws", "")
-                wlabel = _ws_sub_label(wname, w.get("subarea"))
-                for dr in w.get("desc_rows", []):
-                    for iso, cell in (dr.get("cells") or {}).items():
-                        h = float(cell.get("hh") or 0)
-                        wm = per_day_ws.setdefault(iso, {})
-                        e = wm.get(wname)
-                        if e:
-                            e["hh"] += h
-                        else:
-                            wm[wname] = {"hh": h, "label": wlabel}
-            agg: dict[str, dict] = {}
-            for iso, wm in per_day_ws.items():
-                top = sorted(wm.items(), key=lambda kv: kv[1]["hh"], reverse=True)[:2]
-                # Multi-line cell text: each WS on its own pair of lines (label + hours),
-                # in the Schedule's top→bottom order. The top WS (raw key) drives the cell
-                # color, matching the screen where the dominant WS tints the box.
-                text = "\n".join(f"{e['label']}\n{e['hh']:.1f}h" for _, e in top)
-                agg[iso] = {"text": text, "ws_name": top[0][0]}
-            if agg:
-                row_specs.append((task_name, agg))
-        elif mode == "ws":
-            # One row per WS: aggregated hours of that WS per day (WORK mode).
-            for w in wslist:
-                wname = w.get("ws", "")
-                wlabel = _ws_sub_label(wname, w.get("subarea"))
-                agg: dict[str, dict] = {}
-                for dr in w.get("desc_rows", []):
-                    for iso, cell in (dr.get("cells") or {}).items():
-                        h = float(cell.get("hh") or 0)
-                        e = agg.get(iso)
-                        if e:
-                            e["hh"] += h
-                        else:
-                            agg[iso] = {"hh": h, "label": "", "ws_name": wname}
-                row_specs.append((wlabel, agg))
-        else:
-            # FULL: one row per (WS, descrição); cell = descrição + hours.
-            # Aggregate desc_rows by DESCRIÇÃO first (multiple Part Numbers share one
-            # Description in the payload as separate desc_rows) and SUM their hours per
-            # day — mirrors the worker's `byDesc` merge exactly, so a Part Number never
-            # produces its own export box when the UI already aggregated it.
-            for w in wslist:
-                wname = w.get("ws", "")
-                wlabel = _ws_sub_label(wname, w.get("subarea"))
-                by_desc: dict[str, dict] = {}   # desc → iso→cell info
-                desc_order: list[str] = []
-                for dr in w.get("desc_rows", []):
-                    desc = dr.get("desc", "") or ""
-                    cm = by_desc.get(desc)
-                    if cm is None:
-                        cm = {}
-                        by_desc[desc] = cm
-                        desc_order.append(desc)
-                    for iso, cell in (dr.get("cells") or {}).items():
-                        h = float(cell.get("hh") or 0)
-                        e = cm.get(iso)
-                        if e:
-                            e["hh"] += h
-                        else:
-                            cm[iso] = {"hh": h, "label": desc, "ws_name": wname}
-                # In FULL the WS label column repeats per (unique) descrição row.
-                for desc in desc_order:
-                    row_specs.append((wlabel, by_desc[desc]))
-
-        if not row_specs:
-            continue
-
-        n_rows = len(row_specs)
-        for ri, (ws_label, cellmap) in enumerate(row_specs):
-            r = current_row
-            ws_gantt.row_dimensions[r].height = 28
-            first_in_group = (ri == 0)
-            for col_num, val in [
-                (1, ""),
-                (2, wo if first_in_group else ""),
-                (3, task_name if first_in_group else ""),
-                (4, ws_label),
-            ]:
-                c = ws_gantt.cell(r, col_num, val)
-                c.font = BOLD8
-                c.alignment = CENTER if col_num == 1 else LEFT
-                c.border = BORDER; c.fill = bg_fill
-            _write_day_cells(r, cellmap, bg_fill)
-            current_row += 1
-
-        if n_rows > 1:
-            end_row = start_row + n_rows - 1
-            for col_num in [1, 2, 3]:
-                ws_gantt.merge_cells(
-                    start_row=start_row, start_column=col_num,
-                    end_row=end_row, end_column=col_num,
-                )
-                ws_gantt.cell(start_row, col_num).alignment = Alignment(
-                    horizontal="left" if col_num >= 2 else "center",
-                    vertical="center", wrap_text=True,
-                )
-
-    ws_gantt.column_dimensions["A"].width = 7
-    ws_gantt.column_dimensions["B"].width = 22
-    ws_gantt.column_dimensions["C"].width = 13
-    ws_gantt.column_dimensions["D"].width = 12
-    for i, d in enumerate(dates):
-        letter = get_column_letter(COL_OFFSET + 1 + i)
-        ws_gantt.column_dimensions[letter].width = 5 if d.get("is_weekend") else 15
-    ws_gantt.freeze_panes = "E3"
-
-    buf = io.BytesIO()
-    wb_out.save(buf)
-    return buf.getvalue()
 
 
-def build_gantt_excel_from_scenario_bytes(
-    file_bytes: bytes,
-    date_from: str | None = None,
-    date_to: str | None = None,
-    lines: list[str] | None = None,
-) -> bytes:
-    """
-    Gera o Excel do Gantt a partir de um arquivo de cenário (Schedule-MS Excel).
-    Usa a mesma lógica de build_gantt_data_from_scenario_excel para carregar os dados,
-    depois chama build_gantt_excel com os dados pré-carregados.
-    """
-    import io as _io
-    import openpyxl as _opx
-    from collections import defaultdict as _dd
-
-    wb = _opx.load_workbook(_io.BytesIO(file_bytes), read_only=True, data_only=True)
-    _available = list(wb.sheetnames)
-    _sm_sheet = next((s for s in _SHEETS_MS if s in _available), None)
-    if _sm_sheet is None:
-        raise ValueError(
-            f"Aba Schedule não encontrada. Esperado: {_SHEETS_MS}. Disponível: {_available}"
-        )
-    ws_ms = wb[_sm_sheet]
-    ms_rows = list(ws_ms.iter_rows(values_only=True))
-    if not ms_rows:
-        raise ValueError("Planilha Schedule - MS está vazia.")
-    ms_hdr = [_norm(c) for c in ms_rows[0]]
-
-    # Accent/case-insensitive column matching with PT/EN fallbacks (Start→Início,
-    # Finish→Término). Errors list only the missing required columns, not the sheet's.
-    _cols = _resolve_scenario_columns(ms_hdr)
-    i_wo, i_tn, i_sm, i_tk, i_ln, i_fn, i_ct = (
-        _cols["wo"], _cols["tn"], _cols["sm"], _cols["tk"], _cols["ln"], _cols["fn"], _cols["ct"])
-
-    ms_by_wo: dict = _dd(list)
-    for row in ms_rows[1:]:
-        wo = _norm(row[i_wo]) if len(row) > i_wo else ""
-        if not wo:
-            continue
-        raw = row[i_sm] if i_sm >= 0 and len(row) > i_sm else None
-        start_dt = raw.date() if isinstance(raw, datetime) else (raw if isinstance(raw, date) else None)
-        fn_raw = row[i_fn] if i_fn >= 0 and len(row) > i_fn else None
-        fn_str = (
-            fn_raw.date().isoformat() if hasattr(fn_raw, "date")
-            else (str(fn_raw).strip() if fn_raw is not None else "")
-        )
-        _tk_val = _safe_float(row[i_tk]) if len(row) > i_tk else None
-        ms_by_wo[wo].append({
-            "task_name": _norm(row[i_tn]) if len(row) > i_tn else "",
-            "start_ms":  start_dt,
-            "takt":      _tk_val or 1.0,
-            "takt_raw":  _tk_val,
-            "linha":     _norm(row[i_ln]) if i_ln >= 0 and len(row) > i_ln else "",
-            "finish_ms": fn_str,
-            "contract_ms": _parse_excel_date_raw(row[i_ct] if i_ct >= 0 and len(row) > i_ct else None),
-        })
-    wb.close()
-
-    # Load LocosRout from DB
-    rt_rows: list = []
-    try:
-        from database import get_db
-        from models import LocosRout as _LR, get_active_ver as _gav
-        with get_db() as _db:
-            _lr_ver  = _gav(_db, "locos_rout")
-            _lr_rows = _db.query(_LR).filter(_LR.ver == _lr_ver).all()
-            if _lr_rows:
-                rt_rows = [["LOCOMOTIVA", "PART NUMBER", "WORKSTATION", "SUBAREA", "AREA",
-                             "HH UNIT", "QTD", "DURACAO", "INICIO", "DESCRIÇÃO", "WORKORDER",
-                             "PART DESC", "ESCOPO", "LINHA"]]
-                for _r in _lr_rows:
-                    rt_rows.append([
-                        getattr(_r, "locomotiva",  "") or "",
-                        getattr(_r, "part_number", "") or "",
-                        getattr(_r, "workstation", "") or "",
-                        getattr(_r, "subarea",     "") or "",
-                        getattr(_r, "area",        "") or "",
-                        getattr(_r, "hh_unit",     0)  or 0,
-                        getattr(_r, "qtd",         0)  or 0,
-                        getattr(_r, "duracao",     "") or "",
-                        getattr(_r, "inicio",      "") or "",
-                        getattr(_r, "descricao",   "") or "",
-                        getattr(_r, "workorder",   "") or "",
-                        getattr(_r, "part_desc",   "") or "",
-                        getattr(_r, "escopo",      "") or "",
-                        getattr(_r, "linha",       "") or "",
-                    ])
-    except Exception:
-        pass
-    if not rt_rows:
-        raise RuntimeError(
-            "LocosRout não encontrado no banco. "
-            "Importe a tabela de roteamento antes de usar Simular Cenário."
-        )
-
-    return build_gantt_excel(
-        date_from=date_from, date_to=date_to, lines=lines,
-        _ms_by_wo=ms_by_wo, _rt_rows=rt_rows,
-    )

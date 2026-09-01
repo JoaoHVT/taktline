@@ -21,9 +21,9 @@
  */
 
 // ── Envelope constants ───────────────────────────────────────────────────────
-const FMT = 'optvision-session-enc'
+const FMT = 'taktline-session-enc'
 const ENC_V = 2                       // envelope format version (2 = gzip-compressed plaintext)
-const AAD = 'optvision-session-enc:v1' // bound as AES-GCM additional data
+const AAD = 'taktline-session-enc:v1' // bound as AES-GCM additional data
 const PBKDF2_ITER = 600_000
 const SALT_BYTES = 16
 const IV_BYTES = 12
