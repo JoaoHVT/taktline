@@ -24,7 +24,10 @@ RUN npm run build
 
 
 # ── Stage 2: runtime ──────────────────────────────────────────────────────────
-FROM python:3.13-slim
+# 3.14 and not 3.13: every check in this repo — the seeder, the route sweep, the solver run —
+# was executed on 3.14, and the pins in requirements.txt were resolved there. Matching it means
+# the image runs what was tested rather than something adjacent to it.
+FROM python:3.14-slim
 
 # Node is needed at RUNTIME, not just to build: `next start` is one of the two processes.
 RUN apt-get update \

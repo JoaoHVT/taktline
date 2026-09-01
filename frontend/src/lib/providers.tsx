@@ -4,11 +4,9 @@ import { useState } from 'react'
 import { PermissionsProvider } from '@/context/PermissionsContext'
 import { AuthProvider } from '@/hooks/useAuth'
 
-// MsalProvider saiu daqui junto com o Entra ID. Ele era o provider mais externo porque
-// AuthProvider dependia de useMsal; agora a sessão é própria (usuário + senha, token
-// assinado pelo backend e guardado em lib/tokenStore), então AuthProvider não depende de
-// nada acima dele além do QueryClient — e continua acima de PermissionsProvider, que lê
-// `tokenReady` para saber quando buscar o papel do usuário.
+// AuthProvider não depende de nada acima dele além do QueryClient: a sessão é usuário +
+// senha, com o token assinado pelo backend e guardado em lib/tokenStore. Fica acima de
+// PermissionsProvider, que lê `tokenReady` para saber quando buscar o papel do usuário.
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(

@@ -177,7 +177,7 @@ def validate_bearer_token(token: str) -> dict:
     HTTPException 401 em qualquer falha (ausente, malformado, assinatura inválida,
     expirado, tipo errado).
 
-    O dict devolvido mantém as chaves da versão Entra ID (email/name/oid/...) porque
+    O dict devolvido mantém as chaves que o resto do main.py já lê (email/name/oid/...) porque
     main.py inteiro lê `user["email"]` e `user["oid"]`; `oid` passa a ser o próprio
     username, que é a chave estável desta implementação.
     """

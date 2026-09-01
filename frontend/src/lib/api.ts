@@ -28,7 +28,7 @@ export const api = axios.create({
   timeout: 30000,
 })
 
-// Attach Azure ID token to every request when the user is authenticated, plus the
+// Attach the session token to every request when the user is authenticated, plus the
 // admin second-factor "unlock" grant (harmless on non-sensitive endpoints; required
 // by downloads and exports). The server ignores the unlock header
 // where it isn't needed and enforces it where it is.
@@ -242,7 +242,7 @@ api.interceptors.response.use(
         // recover it → the session is unrecoverable without the user. Surface the
         // re-login modal globally instead of bubbling an opaque auth error.
         //
-        // EXCEPT for background polls: those mount before MSAL has authenticated, so
+        // EXCEPT for background polls: those mount before the user has signed in, so
         // their first probe 401s as a matter of course. Letting that fire the global
         // reauth trigger would pop the login modal for a status dot. A real user
         // action hitting a dead session still raises it through this same path.
@@ -422,7 +422,7 @@ export async function cancelJob(job_id: string) {
 }
 
 // ── Authenticated file download ──────────────────────────────────
-// Protected download endpoints require the Azure bearer token like every other
+// Protected download endpoints require the bearer token like every other
 // API call. A plain window.open / <a href> navigation does NOT send the
 // Authorization header, so it would 401. Instead fetch the file as a blob through
 // the authenticated `api` client (its interceptor attaches the token and handles
@@ -993,7 +993,7 @@ export async function optimizeGanttConflictsStreaming(
   let res = await doFetch()
   if (res.status === 401) {
     // Token expired/invalid (incl. after a long idle). Try a single silent refresh
-    // through the MSAL refresher registered by useAuth, then retry the request once.
+    // through the refresher registered by useAuth, then retry the request once.
     const refreshed = await refreshToken().catch(() => false)
     if (refreshed && getToken()) {
       res = await doFetch()
@@ -1206,10 +1206,9 @@ async function blobErrorDetail(err: unknown): Promise<string | null> {
   return err instanceof Error && err.message ? err.message : null
 }
 
-// ── Autenticação própria (substituiu o Azure AD / Entra ID) ───────────────────
-// Três rotas SEM token — login, solicitação de acesso e renovação — mais a troca de senha,
-// que já exige sessão. Nenhuma delas passa pela recuperação de 401 do interceptor (ver
-// _isAuthRoute): um 401 aqui significa "senha errada", não "sessão morta".
+// ── Autenticação ─────────────────────────────────────────────────────────────
+// Duas rotas SEM token: login e renovação. Nenhuma passa pela recuperação de 401 do
+// interceptor (ver _isAuthRoute) — um 401 aqui significa "senha errada", não "sessão morta".
 
 export interface AuthSessionUser {
   username: string

@@ -100,12 +100,12 @@ function isDefinitiveAuthFailure(err: unknown): boolean {
 export function PermissionsProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, tokenReady } = useAuth()
   // Depend on a STABLE primitive, never on the currentUser object. The reason predates the
-  // Entra ID removal (msal-react rebuilt its AccountInfo on every MSAL event, so `currentUser`
+  // The identity object is rebuilt on some renders, so `currentUser`
   // got a fresh identity even with the same account signed in, and each of the effects below
   // re-fired — a fresh /api/permissions/me + calendar fetch — on any incidental auth event) and
   // survives it: useAuth now rebuilds `currentUser` on every token renewal, which is the same
   // hazard with a different cause. `username` is the account's stable key in the local system,
-  // the way homeAccountId was in MSAL; email is the fallback.
+  // username is the stable key; email is the fallback.
   const accountKey = currentUser?.username ?? currentUser?.email ?? ''
   const cached = readCache()
   const [role,     setRole]     = useState<UserRole>(cached?.role ?? 'reader')
@@ -192,7 +192,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
 
   // Memoized so the value object's identity only changes when a flag actually changes. This provider
   // wraps the whole app; an unmemoized value would hand every consumer a new object on any incidental
-  // re-render (e.g. an MSAL auth event bubbling through a parent), forcing needless re-renders.
+  // re-render (an auth event bubbling through a parent), forcing needless re-renders.
   const value = useMemo<PermissionsValue>(() => ({
     role,
     username,

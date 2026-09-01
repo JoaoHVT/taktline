@@ -8,7 +8,7 @@
 // refresh is forced so any privileged UI is dropped immediately as well.
 //
 // TWO CASES, ONE SCREEN. 'banned' is a revoked account and says so. 'unregistered' changed
-// meaning with the Entra ID removal: it used to be the new-user lockdown (an identity the
+// meaning: it used to be the new-user lockdown (an identity the
 // corporate directory had authenticated but that had no roster row). Nobody is auto-registered
 // any more, so a token can only name an unknown account when that account was DELETED while
 // its session was still open — and the honest thing to tell that person is that the account is

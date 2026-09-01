@@ -2218,7 +2218,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
 
       {/* Avatar right-click menu. Deixou de ser exclusivo de admin porque ganhou uma entrada
           que é de TODO usuário: "Alterar Senha". Com o login local, quem entra pela primeira
-          vez está usando a senha que a migração do Entra ID gerou, e um Leitor não teria por
+          vez está usando a senha inicial que recebeu, e um Leitor não teria por
           onde substituí-la se este menu continuasse fechado para ele. As três entradas
           administrativas seguem condicionadas a `canManageUsers`, e cada modal é re-checado
           no ponto de montagem — o menu decide o que é oferecido, não o que é permitido. */}

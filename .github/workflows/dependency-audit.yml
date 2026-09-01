@@ -2,7 +2,7 @@
 # The finding this exists for: nothing ever checked the pinned dependencies against an
 # advisory feed, so the frontend sat on 9 high-severity advisories (an axios auth-bypass and
 # a Next.js middleware bypass among them) and the backend on 29 across 7 packages — including
-# PyJWT, which validates every Azure token, and python-multipart, which parses every upload.
+# PyJWT, which validates every session token, and python-multipart, which parses form bodies.
 # All of them were fixed by a version bump that was available the whole time. Nobody was
 # negligent; there was simply no signal.
 #

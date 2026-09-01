@@ -28,7 +28,7 @@ interface BackendHealth {
 
 const POLL_INTERVAL_MS = 5 * 60 * 1000 // 5 min, só com a aba visível (deixa o backend dormir)
 
-// /api/db/status requires auth, and this hook mounts BEFORE MSAL has a token, so the
+// /api/db/status requires auth, and this hook mounts BEFORE there is a token, so the
 // first probe of a session reliably 401s. Two consequences are handled below:
 //   • A 401/403 means "we can't see the DB yet", NOT "the DB is down" — the dot stays
 //     'checking' rather than lying 'offline'.

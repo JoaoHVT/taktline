@@ -722,7 +722,7 @@ export function combineBakedWithManual(baked: LocoOverrideMap, manual: LocoOverr
 // PERMANENTLY (the projection-overrides 500 from the NUL-byte scenario_id) that was ~12 identical
 // failing requests per page load, per hydrator — the reported 500/503 log storm.
 //
-//   401 → the token may genuinely still be warming up right after a page load (MSAL not ready, so
+//   401 → the token may genuinely still be warming up right after a page load (the not ready, so
 //         even the interceptor's silent refresh can fail). Worth a couple of tries, no more.
 //   403 → authoritative authorization failure. Never retried.
 //   5xx → the server answered and failed. Retrying cannot change that.

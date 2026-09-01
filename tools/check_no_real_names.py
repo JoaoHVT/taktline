@@ -35,6 +35,12 @@ DENY = {
     "people / accounts": [
         "joao.voss", "joaohvteixeira",
     ],
+    # The previous identity provider. No code here uses it; what these words would leak is the
+    # employer's authentication stack, in comments describing a migration this repo never had.
+    "identity provider": [
+        # "entra" alone is the Portuguese verb; only the product name is a leak.
+        "azure", "entra id", "microsoft entra", "msal", "okta", "adfs",
+    ],
     "infrastructure": [
         # NOT bare "railway": this app schedules locomotives and the word is ordinary here.
         "supabase", "railway.app", "vercel", "microsoftonline",

@@ -416,7 +416,7 @@ class UserPermission(Base):
                    and keeps their original role for restoration on unblock. Superadmins
                    (SUPERADMIN_USERNAMES) can never be blocked.
 
-    This row is now also the CREDENTIAL: with Azure AD / Entra ID gone, `password_hash`
+    This row is also the CREDENTIAL: `password_hash`
     holds the PBKDF2 derivation of the user's own password (see services.auth) and this
     table is the identity store, not just the permission list. Existing rows had no
     password — main._bootstrap_local_credentials generates one for each on the first boot
@@ -429,7 +429,7 @@ class UserPermission(Base):
     username = Column(String, nullable=False, index=True)   # e-mail local-part, lower-cased
     role     = Column(String, nullable=False)               # 'reader' | 'editor' | 'admin'
 
-    # ── Credential (local login; replaced Azure AD) ──────────────────────────────
+    # ── Credential ───────────────────────────────────────────────────────────────
     # `email` is the full address the user signed up with. It is kept ALONGSIDE username
     # rather than replacing it because username is the lookup key everywhere in main.py
     # (roles, audit trail, blocked cache, presence) and rewriting that key during an
@@ -827,7 +827,7 @@ class AuthThrottle(Base):
     Keyed by (bucket, key):
       bucket : '_lock_' for the shared failed-password lockout, or a rate-limit
                bucket name ('unlock' | 'import').
-      key    : the caller's stable identity (Azure oid, falling back to email) —
+      key    : the caller's stable identity (username, falling back to email) —
                the same value produced by main._pw_user_key.
 
     For the '_lock_' bucket:  fail_count (consecutive wrong passwords) + lockout_until

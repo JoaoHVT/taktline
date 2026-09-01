@@ -9,24 +9,18 @@ import {
 } from '@/lib/tokenStore'
 
 /**
- * useAuth — sessão única da aplicação, agora sobre autenticação PRÓPRIA.
+ * useAuth — a sessão única da aplicação.
  *
- * O Azure AD / Entra ID saiu inteiro daqui. O que ele fazia e quem faz agora:
+ * Três peças: o formulário de usuário e senha (LoginModal), lib/tokenStore guardando
+ * { token, user } em localStorage, e POST /api/auth/refresh trocando um token ainda válido
+ * por outro.
  *
- *   popup do MSAL           → formulário de usuário e senha (LoginModal)
- *   cache do MSAL           → lib/tokenStore, que persiste { token, user } em localStorage
- *   acquireTokenSilent      → POST /api/auth/refresh, que troca um token válido por outro
- *   validação de domínio    → feita no CADASTRO (solicitação de acesso), não a cada entrada
- *
- * O contrato exposto ao resto do app foi mantido de propósito — `tokenReady`, `currentUser`,
- * `isAuthenticated`, `login`, `logout` continuam significando exatamente o que significavam.
- * Toda a página, o cabeçalho, o PermissionsProvider e os dois modais do Gantt já reagem a
- * `tokenReady` ('pending' | 'ok' | 'reauth-required'), e reescrever essas reações no meio de
- * uma troca de autenticação seria mexer em duas coisas ao mesmo tempo.
- *
- * A sessão continua ÚNICA e vinda de um contexto, e não uma cópia por chamador: com cópias
+ * A sessão é ÚNICA e vem de um contexto, e não uma cópia por chamador: com cópias
  * independentes, um 401 viraria 'reauth-required' em uma delas só — a tela de login poderia
  * nunca aparecer, ou nunca fechar depois de um login bem-sucedido.
+ *
+ * `tokenReady` ('pending' | 'ok' | 'reauth-required') é o sinal que a página, o cabeçalho, o
+ * PermissionsProvider e os dois modais do Gantt observam para saber quando podem chamar a API.
  */
 
 const devLog = (...args: unknown[]): void => {
@@ -105,7 +99,7 @@ function useAuthController() {
   }, [])
 
   // ── Restaurar a sessão gravada no primeiro render ──────────────────────────
-  // Sem MSAL não existe mais ninguém reconstruindo a sessão a partir de um cache próprio:
+  // Nada além deste módulo reconstrói a sessão, então ela é lida do tokenStore:
   // se este efeito não rodar, um F5 vira uma tela de login. Um token já expirado é
   // descartado dentro de restoreSession, e não restaurado para morrer na primeira chamada.
   useEffect(() => {

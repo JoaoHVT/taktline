@@ -85,7 +85,7 @@ export function reloadForStaleBuild(): boolean {
  * The message used to be withheld here on the grounds that it can carry a backend detail
  * string. That reasoning does not survive contact with the problem it created: the backend
  * already scrubs its own details before they leave it (see the error scrubbing in main.py), the
- * app is behind Azure AD and reachable only by accounts in one email domain, and with nothing but an opaque
+ * app is behind authentication and reachable only by a signed-in account, and with nothing but an opaque
  * `digest` on screen a crash reported by a user is not diagnosable at all — which is precisely
  * how a reproducible failure went a full day without a name. The stack is trimmed to its first
  * frames: that is where the throwing component is, and the rest is bundler noise.

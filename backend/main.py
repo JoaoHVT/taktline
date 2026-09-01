@@ -763,11 +763,11 @@ async def _apply_security_headers(request, call_next):
 
 
 # ── Base auth dependency (identity + active-account enforcement) ─────────────
-# Every route depends on `require_auth`. We WRAP the raw Azure/JWT validation
+# Every route depends on `require_auth`. We WRAP the raw token validation
 # (services.auth.require_auth, imported as _base_require_auth) so that a single
 # definition additionally denies BLOCKED accounts everywhere — no per-route edits.
-# A blocked user is authenticated by Azure AD but denied the whole application
-# (403 + X-Blocked). Superadmins can never be blocked. The block check
+# A blocked user holds a valid token but is denied the whole application
+# (403 + X-Blocked). The block check
 # (_enforce_not_blocked) is defined later in the module and resolves at call time.
 #
 # NOTE: /api/permissions/me intentionally uses _base_require_auth (the raw one), so
@@ -786,7 +786,7 @@ async def require_auth(request: Request, user: dict = Depends(_base_require_auth
 # ── Owner-only API docs (HTTP Basic Auth) ────────────────────────────────────
 # The public Swagger/OpenAPI is disabled (see FastAPI(...) above). These custom
 # routes re-expose /docs, /redoc and /openapi.json but ONLY to whoever holds the
-# DOCS_USER / DOCS_PASSWORD credentials — a SEPARATE secret from the app's Azure
+# DOCS_USER / DOCS_PASSWORD credentials — a SEPARATE secret from the app's own
 # login, so ordinary users cannot reach them. A
 # browser navigation to /docs triggers the native Basic-Auth prompt; the browser
 # reuses the same credentials for the /openapi.json fetch Swagger UI then makes.
@@ -855,7 +855,7 @@ def owner_redoc(_owner: bool = Depends(_require_docs_owner)):
 
 
 # ── Secondary administrative factor ("unlock") ───────────────────────────────
-# Authentication (Azure) only proves IDENTITY. Sensitive operations additionally
+# Authentication only proves IDENTITY. Sensitive operations additionally
 # require AUTHORIZATION (role) AND a second factor: the user supplies a dedicated
 # ADMIN_PASSWORD once, receives a short-lived signed grant, and the frontend
 # replays it in the  X-Admin-Unlock  header for ~15 minutes ("unlock once per
@@ -1392,7 +1392,7 @@ def health():
 
 @app.get("/api/me")
 async def me(user: dict = Depends(require_auth)):
-    """Returns the authenticated user's profile extracted from the Azure ID token."""
+    """Returns the authenticated user's profile, as carried by the session token."""
     return {
         "email":      user["email"],
         "name":       user["name"],
@@ -1749,9 +1749,9 @@ def assembly_details_explicit(
 @app.websocket("/ws/{job_id}")
 async def websocket_progress(websocket: WebSocket, job_id: str):
     # Backend auth for the WS channel. Browsers cannot set an Authorization header on
-    # a WebSocket, so the client passes the Azure ID token as a ?token= query param.
+    # a WebSocket, so the client passes the session token as a ?token= query param.
     # Validate it with the SAME central check as every HTTP route (signature, expiry,
-    # issuer, audience, identity, allowed domain) BEFORE accepting the socket. Reject
+    # issuer, type) BEFORE accepting the socket. Reject
     # anonymous / invalid / unauthenticated connections with 1008 (policy violation).
     try:
         _ws_user = validate_bearer_token(websocket.query_params.get("token", ""))
@@ -2363,11 +2363,10 @@ def _is_user_blocked(username: str) -> bool:
 # lets a container idle out. It denies access, and that is all it does.
 _SETTING_OFFLINE      = "server_offline"
 _SETTING_OFFLINE_MSG  = "server_offline_message"
-#: Historic key name, kept so the existing app_setting row keeps working. Its MEANING changed
-#: with the Entra ID removal: "block new users" is no longer a switch, it is the permanent rule
-#: (nobody is auto-registered any more — see _touch_user_login). What the flag controls now is
-#: whether the app still ACCEPTS self-service access requests at all. On ⇒ POST
-#: /api/auth/request-access is refused outright, so the sign-up form stops taking submissions;
+#: Historic key name, kept so an existing app_setting row keeps working. "Block new users" is
+#: not a switch here, it is the permanent rule: nobody is auto-registered (see _touch_user_login)
+#: and there is no sign-up form to refuse, so the flag has nothing left to control. It is read
+#: and never written.
 #: off (the default) ⇒ requests are accepted and queue for an admin decision. Renaming the key
 #: would silently reset every deployment that already has it set, which is why it stays.
 
@@ -2431,11 +2430,8 @@ def _offline_message() -> str:
 def _is_unregistered_locked(username: str) -> bool:
     """True when this identity has no roster row — i.e. the account does not exist.
 
-    This used to be conditional on the new-user lockdown switch, because an unknown caller
-    who had authenticated against Entra ID was a legitimate first-time user and got
-    auto-registered as Reader. With Entra ID gone that whole path is gone with it: an
-    account is created ONLY by an admin or by an approved access request, so an
-    authenticated token naming a user who is not on the roster means the account was
+    An account is never created by signing in. A valid token naming a user who is not on the
+    roster therefore means the account was
     DELETED while its session was still alive. Denying it is the point — otherwise
     "Excluir usuário" would only take effect at the next expiry, up to 12 h later.
 
@@ -2610,10 +2606,8 @@ def _touch_user_login(username: str) -> None:
     """Refresh last_login (throttled to ~10 min so the hot /permissions/me path isn't a write
     on every poll). Best-effort.
 
-    NO LONGER AUTO-REGISTERS. Under Entra ID, an unknown caller had already been vetted by the
-    corporate directory, so creating a Reader row for them on sight was the sensible default.
-    With local passwords there is nothing behind the identity except this table, so a row that
-    appears by itself would BE the account — self-service admin. Accounts are now created in
+    NEVER AUTO-REGISTERS. There is nothing behind an identity except this table, so a row that
+    appeared by itself would BE the account — self-service admin. Accounts are created in
     exactly two places: an admin adding one, and an approved access request. A caller with a
     valid token and no row is handled by _enforce_not_blocked (the account was deleted).
 
@@ -2654,7 +2648,7 @@ def _touch_user_activity(username: str) -> None:
     health you were trying to judge.
 
     A log line, not a new endpoint, on purpose. The console is a separate loopback server with no
-    Azure token and no database session, so serving it this data any other way would mean a route
+    session token and no database session, so serving it this data any other way would mean a route
     that hands out user identities without authenticating anyone — the exact thing the rest of
     this file exists to prevent. The console already tails this stream, so the data reaches it
     with no new HTTP surface at all.
@@ -2743,13 +2737,10 @@ def _persist_lockout_event(user: dict) -> None:
         with get_db() as db:
             row = db.query(UserPermission).filter(UserPermission.username == uname).first()
             if row is None:
-                # NÃO cria a linha. Antes disto o lockout só podia vir de alguém já autenticado
-                # pela Entra ID, então "criar a linha se faltar" era um conserto de cadastro.
-                # Agora o lockout também nasce na TELA DE LOGIN, que é pública: criar a conta
-                # aqui deixaria qualquer um materializar um usuário no cadastro só errando a
-                # senha cinco vezes com o nome que quisesse — e o nome ficaria reservado,
-                # recusando a solicitação de acesso de quem realmente se chama assim. O evento
-                # de auditoria continua sendo gravado, que é o que o admin precisa ver.
+                # NÃO cria a linha. O lockout nasce na TELA DE LOGIN, que é pública: criar a
+                # conta aqui deixaria qualquer um materializar um usuário no cadastro só errando a
+                # senha cinco vezes com o nome que quisesse. O evento de auditoria continua
+                # sendo gravado, que é o registro que importa.
                 _log_security_event(db, actor="system", target=uname, event_type="lockout",
                                     detail="Bloqueio por senha incorreta (usuário não cadastrado).")
                 return

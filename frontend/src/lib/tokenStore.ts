@@ -6,15 +6,12 @@
  * This is intentionally a simple module variable (not React state) so it
  * can be read synchronously inside the axios interceptor without hooks.
  *
- * The token is now issued by OUR OWN backend (POST /api/auth/login, signed HS256) instead
- * of by Microsoft Entra ID. What changed here as a result:
+ * The token is issued by the backend (POST /api/auth/login, signed HS256), and NOTHING ELSE
+ * remembers the session — so persisting it is this module's job. Without that, every page
+ * refresh would be a new login.
  *
- *   • PERSISTENCE. MSAL kept its own cache in localStorage and rebuilt the session from it
- *     on every page load, so this module only ever held a value MSAL had just handed it.
- *     With MSAL gone there is nothing else remembering the session, so persisting it is now
- *     this module's job — otherwise every refresh (F5) would be a new login.
- *   • It lives in localStorage, not sessionStorage: the app is opened across several tabs
- *     during a shift and a per-tab session would ask for the password in each one.
+ * localStorage and not sessionStorage: the app is opened across several tabs at once, and a
+ * per-tab session would ask for the password in each one.
  */
 
 const STORAGE_KEY = 'taktline.session'
@@ -29,9 +26,9 @@ export interface SessionUser {
 let _token: string | null = null
 let _user: SessionUser | null = null
 
-// Listeners notified when a token first appears (or is replaced). The health poll
-// mounts before MSAL has authenticated, so its first DB probe is guaranteed to 401;
-// without this signal it would sit on a stale 'offline' until the next 5-min beat.
+// Listeners notified when a token first appears (or is replaced). The health poll mounts
+// before the user has signed in, so its first DB probe is guaranteed to 401; without this
+// signal it would sit on a stale 'offline' until the next beat.
 const _tokenListeners = new Set<(token: string | null) => void>()
 
 /** Subscribe to token changes. Returns an unsubscribe function. */
@@ -180,7 +177,7 @@ export function triggerReauth(): void {
 
 // A single in-flight refresh shared by all concurrent callers. When several Gantt
 // requests expire at once (period selection + type loading + data fetch), they would
-// otherwise each fire their own MSAL silent acquisition — stampeding and racing. The
+// otherwise each fire their own refresh — stampeding and racing. The
 // first caller starts the refresh; everyone else awaits the same promise.
 let _refreshInFlight: Promise<boolean> | null = null
 

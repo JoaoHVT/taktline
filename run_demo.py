@@ -66,9 +66,15 @@ def main() -> int:
         procs.append(api)
         print(f"[demo] API   http://127.0.0.1:{args.api_port}  (loopback only)")
 
-        npx = "npx.cmd" if os.name == "nt" else "npx"
+        # The project's OWN next binary, not `npx next`: npx will reach for the network when it
+        # cannot resolve a package locally, and a container that shells out to the registry at
+        # start-up is both slower and a dependency nobody asked for.
+        local_next = FRONTEND / "node_modules" / ".bin" / ("next.cmd" if os.name == "nt" else "next")
+        if not local_next.exists():
+            print("[demo] frontend/node_modules não existe — rode `npm ci` em frontend/.")
+            return 1
         web = subprocess.Popen(
-            [npx, "next", "start", "--hostname", args.host, "--port", str(args.port)],
+            [str(local_next), "start", "--hostname", args.host, "--port", str(args.port)],
             cwd=str(FRONTEND), env=env,
         )
         procs.append(web)
