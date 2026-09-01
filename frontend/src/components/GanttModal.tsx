@@ -273,7 +273,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   // an undefined.
   //
   // TWO flags, because the two "no Schedule" states are not the same thing to a reader:
-  //   • scheduleApplicable — there IS a Schedule behind this selection. False for GCR alone.
+  //   • scheduleApplicable — there IS a Schedule behind this selection.
   //     Nothing can make its tab work, so that tab is DISABLED: no click, no navigation.
   //     It used to be merely locked, which meant clicking it turned the module on, switched to
   //     tab 3, and the guard effect below immediately bounced the user to Resumo Geral — a
@@ -3862,7 +3862,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
   function handleTabSwitch(tab: 0 | 1 | 2 | 3) {
     if (loading) return
     if (tab === activeTab) return
-    // Nothing in the selection is laid out on a Schedule (GCR alone) — the tab is inert. Refuse
+    // Nothing in the selection is laid out on a Schedule — the tab is inert. Refuse
     // the switch outright rather than moving and being bounced back by the guard effect.
     if (tab === 3 && !scheduleApplicable) return
     // The Schedule tab builds on demand for whatever dataset is currently loaded (the modal
@@ -4077,7 +4077,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
           </button>
           {TABS.map(({ i, name }) => {
             const active = activeTab === i
-            // DISABLED when the loaded Tipos have no Schedule at all (GCR alone): there is
+            // DISABLED when the loaded Tipos have no Schedule at all: there is
             // nothing a click could load, so it must not navigate anywhere.
             const scheduleInert = i === 3 && !scheduleApplicable
             // LOCKED (not disabled) when only the module is off: it stays clickable and
@@ -4165,10 +4165,10 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                 <ResumoGeralTab
                   locoOverrides={locoOverrides}
                   summaryTestReady={summaryTestReady}
-                  /* The GCR fetch is folded into the SAME "Calculando resumo…" state the
+                  /* A second-source fetch would fold into the SAME "Calculando resumo…" state the
                      Schedule aggregation uses, rather than getting an indicator of its own: from
                      the reader's side both are "the numbers on this screen are not ready yet",
-                     and a GCR-only load previously sat on a blank tab with nothing spinning. */
+                     and such a load previously sat on a blank tab with nothing spinning. */
                   summaryComputing={summaryComputing}
                   summaryTestData={summaryTestData}
                   comparisonSummary={comparisonMode ? comparisonOtherSummaryCmp : refSummaryCmp}

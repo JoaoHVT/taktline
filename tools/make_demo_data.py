@@ -39,15 +39,23 @@ CLIENTES = [f"Cliente {i}" for i in range(1, 3)]
 SCOPES = ["LEVE", "MEDIO", "PESADO"]
 TIPOS_FW = ["MONTAGEM", "PERITAGEM"]
 
-WSNS = [f"WS{i:02d}" for i in range(1, N_WORKSTATIONS + 1)]
+# WS40 and WS50 are the two conflict workstations: one physically shared pair every line queues
+# for. They are named as the scheduling rules name them (see the worker's CONFLICT_WS_PHYSICAL
+# and SAT_CAPABLE_WS), so those rules act on real stations here instead of on nothing.
+WSNS = [f"WS{i:02d}" for i in range(1, 25)] + ["WS40", "WS50"]
 PEOPLE = [f"Operador {i}" for i in range(1, N_PEOPLE + 1)]
 ITEMS = [f"Item {i}" for i in range(1, N_ITEMS + 1)]
 
-# Two models sharing their first six stations, so the Schedule has genuine cross-model
-# contention on those workstations instead of two independent chains.
+# Both routings pass through WS01/WS02 and the shared WS40/WS50 pair, so the two lines genuinely
+# contend for stations instead of running as two independent chains.
+_SHARED = ["WS40", "WS50"]
 MODELS = {
-    "MX10": {"linha": "Main Line",    "takt": 2, "units": 8, "wsns": WSNS[0:16]},
-    "MX20": {"linha": "Special Line", "takt": 3, "units": 6, "wsns": WSNS[0:6] + WSNS[16:26]},
+    "MX10": {"linha": "Linha 1", "takt": 2, "units": 8,
+             "wsns": [f"WS{i:02d}" for i in range(1, 9)] + _SHARED
+                     + [f"WS{i:02d}" for i in range(9, 15)]},
+    "MX20": {"linha": "Linha 2", "takt": 3, "units": 6,
+             "wsns": ["WS01", "WS02"] + [f"WS{i:02d}" for i in range(15, 21)] + _SHARED
+                     + [f"WS{i:02d}" for i in range(21, 25)]},
 }
 
 PROTECTION_PN = "PROTECTION DAYS"

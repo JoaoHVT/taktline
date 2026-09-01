@@ -1311,7 +1311,7 @@ export async function getCalendarExceptions(): Promise<{ holidays: string[]; wor
  * This is the period AXIS for a surface that has no Schedule behind it. Every axis in the app
  * — activeYearMonths, activeFws, monthBusinessDays, fwBusinessDays, the fiscal-week ordering —
  * is derived from `date_info`; without one, a surface holding real hours renders empty. The
- * GCR plan is the first such surface.
+ * A plan with no Schedule behind it is the first such surface.
  *
  * Not `getCalendar`, which is Admin-only and returns the override rows behind the Manage
  * Calendar screen. This returns only the computed calendar.

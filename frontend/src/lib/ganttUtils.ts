@@ -23,7 +23,7 @@ export function windowGanttData(
   // NULL means "no line filter"; an EMPTY ARRAY is a filter that matches nothing, and the two
   // are not the same thing. They used to be: `lineFilter.length > 0` treated [] as "no filter"
   // and returned every group. That is what let a selection of only non-schedule-backed Tipos
-  // (GCR alone contributes no Linha, so the list comes out empty) fall through to the WHOLE
+  // (a Tipo with no Linha leaves the list empty) fall through to the WHOLE
   // dataset — every Tipo's rows loaded and windowed for a user who had asked for none of them.
   const lineFilteredGroups = lineFilter
     ? data.groups.filter(g => lineFilter.includes(g.linha))

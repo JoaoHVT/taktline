@@ -5,7 +5,7 @@ import { getGanttData } from '@/lib/api'
 import type { GanttData } from '@/lib/api'
 import { getToken, refreshToken } from '@/lib/tokenStore'
 import { LocomotiveProgress, LINE_TYPE_COLORS } from './gantt/LocomotiveProgress'
-import { TIPOS, TIPO_KEYS, TIPO_NO_SCHEDULE_NOTE, DEFAULT_TIPO_KEY, anyScheduleBacked } from '@/lib/tipos'
+import { TIPOS, TIPO_KEYS, DEFAULT_TIPO_KEY, anyScheduleBacked } from '@/lib/tipos'
 import { SUMMARY_LINE_TYPE_MAP } from './gantt/useGanttFilters'
 import { useFileDrop } from '@/lib/useFileDrop'
 import { checkUploadSize } from '@/lib/uploadLimits'
@@ -79,10 +79,10 @@ const SCHEDULE_MESSAGES = [
   'Preparando o Master Schedule…',
   'Construindo o Master Schedule…',
 ]
-// Same idea for a selection that has no Schedule behind it at all (GCR alone): the wait is the
+// Same idea for a selection with no Schedule behind it at all: the wait is the
 // published plan, so the caption names it instead of talking about a cronograma being built.
-const GCR_MESSAGES = [
-  'Carregando o plano GCR publicado…',
+const NO_SCHEDULE_MESSAGES = [
+  'Carregando os dados do período…',
   'Lendo o plano de serviços…',
 ]
 const pickMessage = (pool: string[]) => pool[Math.floor(Math.random() * pool.length)]
@@ -214,7 +214,7 @@ export function GanttLaunchModal({
   const LINE_TYPE_MAP: Record<string, string[]> = SUMMARY_LINE_TYPE_MAP
 
   // ── Is there a Schedule to load at all? ─────────────────────────────────────
-  // A Tipo with no Schedule behind it (GCR) contributes no Linha and therefore no groups. With
+  // A Tipo with no Schedule behind it contributes no Linha and therefore no groups. With
   // ONLY such Tipos selected the Schedule module would build over an empty set: the toggle would
   // be on, several seconds and a lot of memory would go into the heavy module, and the tab it
   // unlocked would open blank. So the toggle is disabled and reads as off for that selection —
@@ -343,17 +343,6 @@ export function GanttLaunchModal({
       .flatMap(([, linhas]) => linhas)
     const lineFilter = activeLinhas.length < allLinhas.length ? activeLinhas : undefined
 
-    // ── The GCR plan is part of THIS load, so it is waited for HERE ────────────────
-    // Its hours do not come from the Schedule, so the offscreen Schedule preload — the wait the
-    // locomotive band normally covers — never included them, and a GCR-only selection has no
-    // preload at all. The result was a launch that closed at once and then fetched the plan
-    // behind an already-open modal, with nothing spinning. Start it now, in PARALLEL with the
-    // Gantt data, and hold the band until it lands. `primeGcrSummary` parks the promise for the
-    // modal to take, so waiting here costs no second request.
-    // Wait on it only when nothing else already does. With the Schedule module on, the offscreen
-    // build holds the band for far longer than this fetch and the plan lands inside that wait —
-    // blocking on it first would only push the build back by the plan's own load time.
-
     if (scenarioData) {
       setLoadProgress(60)
       await new Promise<void>(r => setTimeout(r, 80))
@@ -466,8 +455,8 @@ export function GanttLaunchModal({
   // use so the consist doesn't reshuffle between loads.
   //
   // EVERY selected Tipo, not just the schedule-backed ones. The consist represents what is
-  // being loaded, and a Tipo whose hours come from somewhere other than the Schedule (GCR) is
-  // still being loaded — filtering it out left a GCR-only launch with an empty consist, which
+  // being loaded, and a Tipo whose hours come from somewhere other than the Schedule is
+  // still being loaded — filtering it out left such a launch with an empty consist, which
   // fell back to the generic single red loco and said nothing about what was actually loading.
   const bandColors = TIPO_KEYS
     .filter(k => selLineTypes.has(k))
@@ -480,7 +469,7 @@ export function GanttLaunchModal({
   useEffect(() => {
     if (!bandVisible) return
     setLoadMsg(pickMessage(
-      schedulePreloading ? SCHEDULE_MESSAGES : !scheduleApplicable ? GCR_MESSAGES : LOAD_MESSAGES))
+      schedulePreloading ? SCHEDULE_MESSAGES : !scheduleApplicable ? NO_SCHEDULE_MESSAGES : LOAD_MESSAGES))
     // Re-roll only when a NEW phase starts, not on progress ticks.
   }, [bandVisible, schedulePreloading, scheduleApplicable])
 
@@ -650,7 +639,7 @@ export function GanttLaunchModal({
             {/* Disabled — not hidden — when nothing in the selection has a Schedule. A control
                 that vanishes leaves the user wondering where the Schedule went; one that is
                 visibly off and says why answers it. `scheduleOn` drives the whole appearance,
-                so the switch reads OFF for a GCR-only selection while the stored preference is
+                so the switch reads OFF for a selection with no Schedule while the stored preference is
                 left untouched underneath. */}
             <button
               type="button"
@@ -694,34 +683,19 @@ export function GanttLaunchModal({
           </div>
           {/* EQUAL chips, always. `flex-1` alone did not deliver that: flex-basis is 0 but the
               automatic `min-width: auto` floors every item at its own min-content width, so
-              "Motor Diesel" claimed more room than "GCR" and the row came out ragged. `min-w-0`
+              a long Tipo label claimed more room than a short one and the row came out ragged. `min-w-0`
               removes that floor, which is what makes the five widths identical; `items-stretch`
               (the flex default, stated here because it is load-bearing) then matches their
               heights when one label wraps to a second line. */}
           <div ref={typesRowRef} className={`flex gap-1.5 items-stretch${(cacheLoading || scenarioLoading) ? ' pointer-events-none opacity-50 cursor-wait' : ''}`}>
+            {/* The warning marker that used to ride on a chip is gone with the Tipo it warned
+                about: every registered Tipo is now Schedule-backed, so there is nothing to warn. */}
             {TIPOS.map(({ key, label }) => {
               const active = selLineTypes.has(key)
-              const noSchedule = TIPO_NO_SCHEDULE_NOTE[key]
               return (
-                // `relative` so the warning marker can sit ABOVE the chip without taking part
-                // in the flex row — the chips are `flex-1` and an inline icon would make the
-                // one that has it narrower than the rest.
                 <button key={key} onClick={() => toggleLineType(key)}
-                  title={noSchedule}
                   className={`relative flex-1 min-w-0 px-1 py-1.5 text-[11px] leading-tight rounded border-2 font-semibold transition-colors ${active ? 'border-[#D32F2F] bg-[#D32F2F] text-white' : 'border-gray-300 bg-white text-gray-400 hover:border-gray-400'}`}
                 >
-                  {noSchedule && (
-                    <span
-                      title={noSchedule}
-                      aria-label={noSchedule}
-                      // Top-LEFT corner, not centred over the label: a wrapped two-line label
-                      // reaches the top edge, and a centred marker sat on top of its first word.
-                      className="absolute -top-1.5 -left-1.5 flex items-center justify-center rounded-full shadow"
-                      style={{ width: 15, height: 15, background: '#F59E0B', color: '#fff' }}
-                    >
-                      <AlertTriangle size={9} strokeWidth={3} />
-                    </span>
-                  )}
                   {label}
                 </button>
               )

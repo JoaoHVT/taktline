@@ -42,13 +42,6 @@ export interface FactoryLoadSnapshot {
   dateRange: { from?: string; to?: string } | null
   /** Line filter (linha names) picked in the launch modal. */
   lineFilter: string[] | null
-  /** The published GCR plan, when GCR is in the loaded Tipo selection.
-   *
-   *  A SECOND source, not part of `data`: the Schedule payload has no GCR block, and the plan
-   *  is fetched separately from the database. Plano de Produção shows the two as one grid, so
-   *  the Capacity import has to receive both or it lists a subset of what the user is looking
-   *  at. NOT windowed by `dateRange`/`lineFilter` — those describe the Schedule's period and
-   *  lines, and a published plan is described in neither. */
 }
 
 /** Opaque per-publisher identity. Each AppHeader instance holds one for its whole lifetime. */

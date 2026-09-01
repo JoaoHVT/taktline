@@ -864,7 +864,7 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
         </div>
 
         {/* ── Routing coverage ──
-            MANDATORY companion to importing the GCR plan, not a nicety. An item with no
+            MANDATORY companion to the import, not a nicety. An item with no
             ASSEMBLY in the routing master imports with the plan's hours but no workstation and
             no operations, so it contributes 0 h to the capacity model — and on the grid that is
             indistinguishable from work that genuinely takes no time. Measured on the live plan,

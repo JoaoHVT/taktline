@@ -100,8 +100,8 @@ export function useGanttFilters({
 
   // ── Resumo Geral option lists ────────────────────────────────────────────────
   // Each is a UNION of the two hour sources the tab shows: the Schedule's groups (narrowed by
-  // the Tipo filter through their Linha) and the published GCR plan (already gated on the Tipo
-  // by its caller). `effectiveData` may be null — that is the GCR-only load, where the plan is
+  // the Tipo filter through their Linha) and any published plan (already gated on the Tipo by
+  // its caller). `effectiveData` may be null — that is a load with no Schedule, where the plan is
   // the whole rollup and an early return here would leave the tab with no filters at all.
   const allAreas = useMemo(() => {
     const totalTypes = Object.keys(SUMMARY_LINE_TYPE_MAP).length
@@ -169,10 +169,10 @@ export function useGanttFilters({
   }, [effectiveData])
 
   /**
-   * The Resumo Geral Workstation list: `allWorkstations` plus the GCR plan's Linhas.
+   * The Resumo Geral Workstation list: `allWorkstations` plus any published plan's Linhas.
    *
    * SEPARATE from `allWorkstations`, which the Schedule tab's panel uses, and that separation is
-   * the point. The Schedule has no GCR rows, so a GCR Linha offered there is an option that can
+   * the point. The Schedule has no such rows, so their Linha offered there is an option that can
    * only ever empty the Gantt. Resumo Geral shows both sources in one table and needs both
    * vocabularies — this is the Área/Modelo split (`allAreas` vs `allSchedAreas`) applied to the
    * one axis that did not have it yet.

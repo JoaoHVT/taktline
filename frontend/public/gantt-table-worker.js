@@ -19,10 +19,7 @@ const FROZEN_LEFT_PAD = 0
 // Three separate copies of this classifier used to live in this file (_locoTypeOf,
 // _tipoGeralWorker and the ranking switch). They are now one function with three names.
 const WORKER_TIPOS = [
-  { key: 'new_locos',    linhas: ['Special Line', 'Main Line'] },
-  { key: 'overhaul',     linhas: ['Overhaul'] },
-  { key: 'motor_diesel', linhas: ['Motor Diesel'] },
-  { key: 'propulsion',   linhas: ['Propulsion'] },
+  { key: 'montagem', linhas: ['Linha 1', 'Linha 2'] },
 ]
 const _TIPO_BY_LINHA = new Map()
 for (const _t of WORKER_TIPOS) for (const _l of _t.linhas) _TIPO_BY_LINHA.set(_l.trim().toLowerCase(), _t.key)
@@ -281,39 +278,30 @@ function frozenLabelStyle(text, baseFontPx, availHeightPx) {
 }
 
 // LOCO-mode (collapsed summary row) per-day workstation display — Strategy A ranking.
-// For Type = New Locos, when several workstations compete on the SAME day the collapsed row
-// shows only the highest-ranked one (lower index = higher priority). Workstations not in the
-// list are unranked (Infinity); a day whose competing WS are ALL unranked falls back to the
-// aggregate "N WS" display (Strategy B). Display-only: never touches scheduling/hours/keys.
-const NEW_LOCOS_WS_PRIORITY = ['WS11', 'WS111', 'WS12', 'WS112', 'WS40', 'WS50', 'WS13', 'WS113',
-                               'WS42', 'WS55', 'WS155']
-// Motor Diesel has its own priority list, so that type now uses Strategy A too (it previously
-// fell through to the "N WS" aggregate). Names are multi-word; the rank key strips whitespace,
-// so 'DESMONTAGEM MD' and 'DESMONTAGEMMD' resolve to the same entry.
-const MOTOR_DIESEL_WS_PRIORITY = ['DESMONTAGEM MD', 'PERITAGEM MD', 'MONTAGEM MD']
+// When several workstations compete on the SAME day the collapsed row shows only the
+// highest-ranked one (lower index = higher priority). Workstations not in the list are unranked
+// (Infinity); a day whose competing WS are ALL unranked falls back to the aggregate "N WS"
+// display (Strategy B). Display-only: never touches scheduling/hours/keys.
+//
+// The shared stations lead: WS40 and WS50 are the ones both Linhas queue for, so a day
+// involving one of them is the day worth naming. The rest follow the routing order.
+const WS_DISPLAY_PRIORITY = ['WS40', 'WS50', 'WS01', 'WS02', 'WS03', 'WS04',
+                             'WS05', 'WS06', 'WS07', 'WS08']
 // Shared key normalizer — the ranks are built through it so a spaced source name can never
 // silently miss its own entry (the lookup already normalized, the table did not).
 const _wsRankKey = ws => String(ws == null ? '' : ws).trim().toUpperCase().replace(/\s+/g, '')
-const _newLocosWsRank    = new Map(NEW_LOCOS_WS_PRIORITY.map((w, i) => [_wsRankKey(w), i]))
-const _motorDieselWsRank = new Map(MOTOR_DIESEL_WS_PRIORITY.map((w, i) => [_wsRankKey(w), i]))
-function newLocosWsRank(ws) {
+const _wsDisplayRank = new Map(WS_DISPLAY_PRIORITY.map((w, i) => [_wsRankKey(w), i]))
+function wsDisplayRank(ws) {
   const k = _wsRankKey(ws)
-  return _newLocosWsRank.has(k) ? _newLocosWsRank.get(k) : Infinity
-}
-function motorDieselWsRank(ws) {
-  const k = _wsRankKey(ws)
-  return _motorDieselWsRank.has(k) ? _motorDieselWsRank.get(k) : Infinity
+  return _wsDisplayRank.has(k) ? _wsDisplayRank.get(k) : Infinity
 }
 // The ranking function for a LOCO type, or null when that type has none (→ Strategy B).
 function wsRankFnForType(type) {
   // A ranking is a statement about the ORDER OF STATIONS a LOCO passes through on the
   // Schedule. A Tipo with no Schedule behind it has no such order, so it is refused by the
-  // flag rather than by falling through the two `if`s below — same answer today, but it stays
-  // correct when a Tipo is registered that would otherwise have needed a third `if`.
+  // FLAG — structurally, so a Tipo registered later cannot quietly inherit this ranking.
   if (!isScheduleBackedTipo(type)) return null
-  if (type === 'new_locos')    return newLocosWsRank
-  if (type === 'motor_diesel') return motorDieselWsRank
-  return null
+  return wsDisplayRank
 }
 
 // Workstations allowed to operate on Saturdays BY SCHEDULING RULE. Only the conflict-resolution
@@ -1748,16 +1736,18 @@ function buildConflictSet(groups) {
 // (the LOCO-mode rank lookup), and the worker test harness reaches it off the vm context,
 // where a top-level `const` does not land.
 function _locoTypeOf(linha) { return tipoOfLinha(linha) }
-// Type-pair overlap rule: only New Locos × Overhaul or New Locos × Motor Diesel are a
-// valid overlap on TYPE alone (regardless of boundary). See ganttUtils.isOverlapAllowedPair.
+// Type-pair overlap rule: two LOCOs of DIFFERENT Tipos may share a conflict workstation on one
+// day; two of the same Tipo may not. See ganttUtils.isOverlapAllowedPair.
+//
+// With a single registered Tipo this answers false for every pair. That is the rule applied, not
+// a feature switched off: the exemption exists because two different KINDS of work legitimately
+// queue for one machine, and there is only one kind of work here.
 function _isOverlapAllowedPair(t1, t2) {
   // Structural gate, first and unconditional — mirrors ganttUtils.isOverlapAllowedPair. The
   // rule is about two LOCOs queueing for one physical machine on one day, which only means
   // anything when both Tipos put boxes on the Schedule.
   if (!isScheduleBackedTipo(t1) || !isScheduleBackedTipo(t2)) return false
-  // One must be New Locos and the OTHER Overhaul or Motor Diesel. Order-independent.
-  const other = t1 === 'new_locos' ? t2 : t2 === 'new_locos' ? t1 : null
-  return other === 'overhaul' || other === 'motor_diesel'
+  return t1 !== t2
 }
 
 function classifyConflicts(groups, allowOverlap) {
@@ -4284,7 +4274,7 @@ function computeGlobalCascade(payload) {
   const editedKey = payload.editedKey
   const editedWs = _normWsKey(payload.editedWs)
   // Gate: ANY workstation may cascade cross-loco, not just the ranked ones. The rank list
-  // (NEW_LOCOS_WS_PRIORITY) no longer restricts eligibility — it stays only as the LOCO-mode
+  // (WS_DISPLAY_PRIORITY) no longer restricts eligibility — it stays only as the LOCO-mode
   // display priority. The cascade is inherently self-limiting: a loco that does not occupy the
   // edited WS is skipped below, so an unranked WS simply cascades across the locos that use it.
   if (!editedKey || !editedWs) return { moves: [], wsLocos: [] }
@@ -4313,13 +4303,12 @@ function computeGlobalCascade(payload) {
   const editedLine = editedBase.linha
   // Which locos share a propagation stream with the edited one?
   //
-  // Normal workstations: SAME TYPE only, and for New Locos also the same line (Main Line → Main
-  // Line, Special Line → Special Line). A workstation is a per-stream resource, so a delay in one
-  // stream says nothing about another.
+  // Normal workstations: SAME TYPE and the SAME Linha. A workstation is a per-stream resource,
+  // so a delay in one stream says nothing about another, and the two Linhas are two streams.
   //
   // Conflict workstations (WS40/WS50) are the documented exception: they are ONE physically shared
   // constrained resource that every stream queues for, so their cascade crosses BOTH Type and the
-  // Main↔Special line split. Anything else would model two independent WS40s that do not exist.
+  // Linha split. Anything else would model two independent WS40s that do not exist.
   // PHYSICAL set on purpose: this exception exists because WS40/WS50 is ONE machine every stream
   // queues for. The session-only detection override is a highlighting choice and must not silently
   // widen a propagation rule across Types.
@@ -4327,7 +4316,7 @@ function computeGlobalCascade(payload) {
   const sameStream = (linha) => {
     if (isConflictWs) return true
     const t = _tipoGeralWorker(linha)
-    return t === editedType && (editedType !== 'new_locos' || linha === editedLine)
+    return t === editedType && linha === editedLine
   }
 
   // One entry per same-stream loco that OCCUPIES the edited WS. first/last = current WS window (its

@@ -263,33 +263,12 @@ interface FilterDropdownProps {
   onChange:    (next: Set<string>) => void
   img:         string
   emptyMsg?:   string
-  /** When true, shows the GCM / GCR group-select buttons. See `clientOrg`. */
-  gcmGcr?:     boolean
   /** When true, renders a compact text-only trigger (for use inside filter panel) */
   panelMode?:  boolean
 }
 
-/**
- * Which organisation a CLIENTE option belongs to.
- *
- * The list holds two kinds of value. Monthly-plan clients are client codes, split by the
- * long-standing convention that GCM's are short (up to four letters) and everyone else's are
- * not — a heuristic, but the only signal that data carries. Carga de Fábrica items instead
- * STATE their org, because it is derived from the Tipo (see `lib/factoryLoadImport`), so the
- * literal values are matched first: `'GCR'` is three characters and the length rule alone would
- * file it under GCM, which is the exact opposite of what it says.
- */
-function clientOrg(option: string): 'gcm' | 'gcr' {
-  const v = option.trim()
-  const up = v.toUpperCase()
-  if (up === 'GCM') return 'gcm'
-  if (up === 'GCR') return 'gcr'
-  return v.length <= 4 ? 'gcm' : 'gcr'
-}
-
-function FilterDropdown({ label, options, selected, onChange, img, emptyMsg, gcmGcr, panelMode }: FilterDropdownProps) {
+function FilterDropdown({ label, options, selected, onChange, img, emptyMsg, panelMode }: FilterDropdownProps) {
   const [open,        setOpen]        = useState(false)
-  const [activeGroup, setActiveGroup] = useState<'gcm' | 'gcr' | null>(null)
   const ref = useRef<HTMLDivElement>(null)
   const isActive = selected.size > 0 && selected.size < options.length
 
@@ -311,38 +290,16 @@ function FilterDropdown({ label, options, selected, onChange, img, emptyMsg, gcm
     return () => document.removeEventListener('mousedown', handler)
   }, [])
 
-  // Keep activeGroup in sync: if selection no longer matches the group, clear it
-  useEffect(() => {
-    if (!gcmGcr || activeGroup === null) return
-    const expected = new Set(options.filter(o => clientOrg(o) === activeGroup))
-    const matches = expected.size === selected.size && [...expected].every(o => selected.has(o))
-    if (!matches) setActiveGroup(null)
-  }, [selected, options, activeGroup, gcmGcr])
-
-  const gcmOptions = gcmGcr ? options.filter(o => clientOrg(o) === 'gcm') : []
-  const gcrOptions = gcmGcr ? options.filter(o => clientOrg(o) === 'gcr') : []
-
   const allSelected = options.length > 0 && options.every(o => selected.has(o))
   const toggleOne   = (opt: string) => {
     const next = new Set(selected)
     if (next.has(opt)) next.delete(opt); else next.add(opt)
     onChange(next)
-    if (gcmGcr) setActiveGroup(null)
   }
   const toggleAll = () => {
     onChange(allSelected ? new Set() : new Set(options))
-    if (gcmGcr) setActiveGroup(null)
   }
 
-  const handleGroupClick = (group: 'gcm' | 'gcr') => {
-    if (activeGroup === group) {
-      setActiveGroup(null)
-      onChange(new Set())
-    } else {
-      setActiveGroup(group)
-      onChange(new Set(options.filter(o => clientOrg(o) === group)))
-    }
-  }
 
   const tooltipText = !isActive
     ? `${label}: Todos`
@@ -390,31 +347,6 @@ function FilterDropdown({ label, options, selected, onChange, img, emptyMsg, gcm
             <div className="px-3 py-3 text-xs text-gray-400">{emptyMsg ?? 'Sem opções disponíveis'}</div>
           ) : (
             <>
-              {/* GCM / GCR group toggles (Cliente filter) */}
-              {gcmGcr && (gcmOptions.length > 0 || gcrOptions.length > 0) && (
-                <div className="px-2.5 py-1.5 flex items-center gap-1.5 border-b border-gray-100">
-                  {gcmOptions.length > 0 && (
-                    <button
-                      onClick={() => handleGroupClick('gcm')}
-                      title={`GCM — itens GCM e clientes com até 4 letras (${gcmOptions.length})`}
-                      className="flex-1 py-0.5 rounded text-[10px] font-bold border transition-colors"
-                      style={activeGroup === 'gcm'
-                        ? { backgroundColor: '#D32F2F', color: 'white', borderColor: '#D32F2F' }
-                        : { backgroundColor: 'white',   color: '#D32F2F', borderColor: '#D32F2F' }}
-                    >GCM</button>
-                  )}
-                  {gcrOptions.length > 0 && (
-                    <button
-                      onClick={() => handleGroupClick('gcr')}
-                      title={`GCR — demais clientes (${gcrOptions.length})`}
-                      className="flex-1 py-0.5 rounded text-[10px] font-bold border transition-colors"
-                      style={activeGroup === 'gcr'
-                        ? { backgroundColor: '#D32F2F', color: 'white', borderColor: '#D32F2F' }
-                        : { backgroundColor: 'white',   color: '#D32F2F', borderColor: '#D32F2F' }}
-                    >GCR</button>
-                  )}
-                </div>
-              )}
               <div
                 className="px-2.5 py-1.5 border-b border-gray-100 flex items-center gap-2 cursor-pointer hover:bg-gray-50 text-xs font-medium text-black"
                 onClick={toggleAll}
@@ -949,7 +881,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   // onOpen, never live. `ganttSelLineTypes` above tracks the modal's checkboxes as the user
   // ticks them, and publishing that to the main page made every tick republish a snapshot
   // for a load that had not happened yet: the page re-derived and flashed its loading state,
-  // and ticking GCR fired a plan fetch the user might undo a second later. The page mirrors
+  // and ticking a Tipo fired a fetch the user might undo a second later. The page mirrors
   // what is LOADED; the modal owns what is being chosen.
   const [ganttLoadedLineTypes, setGanttLoadedLineTypes] = useState<string[]>([DEFAULT_TIPO_KEY])
 
@@ -967,7 +899,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
       data: ganttOpenedOnce ? ganttActiveData : null,
       dateRange: ganttDateRange,
       lineFilter: ganttLineFilter,
-      // The Tipo KEYS, not just the Linhas: a Tipo with no Schedule behind it (GCR) puts
+      // The Tipo KEYS, not just the Linhas: a Tipo with no Schedule behind it puts
       // nothing in `lineFilter`, so that list cannot tell the page whether it was selected.
       lineTypes: ganttOpenedOnce ? ganttLoadedLineTypes : null,
     })
@@ -1948,7 +1880,6 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                     selected={filterClient}
                     onChange={setFilterClient}
                     emptyMsg="Nenhum item carregado"
-                    gcmGcr
                   />
                 </div>
                 <div>
@@ -2411,8 +2342,8 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
             // open immediately: with Schedule off there is nothing heavy to wait for, and an
             // already-built dataset is alive in the iframe, so neither can flash an empty view.
             // `scheduleActive`, not the raw toggle: a selection of Tipos that are not laid out
-            // on the Schedule (GCR alone) has no groups to build, so the heavy module must not
-            // be preloaded for it. Without this, opening GCR on its own spent the full Schedule
+            // on the Schedule has no groups to build, so the heavy module must not
+            // be preloaded for it. Without this, opening such a Tipo on its own spent the full Schedule
             // build on an empty set and then unlocked a tab that rendered blank.
             const preloadSchedule = scheduleActive && !sameAsBuilt
             if (!preloadSchedule) {
@@ -2469,7 +2400,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
       )}
 
       {/* The Gantt/Carga de Fábrica modal is where nearly all of this application's compute
-          lives (summary rollups, GCR merges, scenario comparisons, the Schedule worker), so it is
+          lives (summary rollups, scenario comparisons, the Schedule worker), so it is
           also where a render is most likely to throw. Contained here it costs the modal and
           nothing else: the two app shells, their loaded datasets and every other modal stay
           mounted, and "Fechar" returns the user to a working app instead of to app/error.tsx.
@@ -2724,7 +2655,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                 // A saved workspace stores ONE Tipo list — it was saved from a loaded session,
                 // so it is both the modal's selection and the committed one. Restore both, or a
                 // workspace restored with `openedOnce` true publishes a null selection and the
-                // page loses the Tipos (GCR's card included) that the save was showing.
+                // page loses the Tipos that the save was showing.
                 if (Array.isArray(g.selLineTypes)) {
                   setGanttSelLineTypes(g.selLineTypes)
                   setGanttLoadedLineTypes(g.selLineTypes)

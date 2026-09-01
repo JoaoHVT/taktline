@@ -6,7 +6,7 @@
  * turns a 413 arriving after a 40 MB upload into an immediate, named refusal. Keep the two
  * numbers equal — if the server's `UPLOAD_MAX_BYTES` is ever raised, raise this with it.
  *
- * IT ALSO GUARDS THE PURELY LOCAL READERS. Logística, Materiais and the GCR plan parse their
+ * IT ALSO GUARDS THE PURELY LOCAL READERS. The browser-side readers parse their
  * workbook in the browser and never upload it, so the server ceiling does not apply to them at
  * all. Those are precisely the readers that fall over on a huge file — `XLSX.read` over tens of
  * MB of decompressed XML is the tab's memory ceiling, not the network's — so they need a limit

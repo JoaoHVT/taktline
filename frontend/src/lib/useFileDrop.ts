@@ -18,7 +18,7 @@ interface Options {
   /** Receives the dropped file — wire this to the same function the picker calls. */
   onFile: (file: File) => void
   /** Opt-in: receives EVERY dropped file instead of just the first. Zones that legitimately
-   *  take a set (e.g. the two GCR sheets arriving as two workbooks) use this — without it a
+   *  take a set (e.g. a pair of sheets arriving as two workbooks) use this — without it a
    *  two-file drop silently loses one, which reads as "the app ignored my file". */
   onFiles?: (files: File[]) => void
   /** Allowed lowercase extensions, e.g. ['.xlsx', '.xls']. Omit to accept anything. */
@@ -100,7 +100,7 @@ export function useFileDrop({
     }
 
     // SIZE IS CHECKED AFTER THE EXTENSION, and reported per file. A multi-file drop keeps the
-    // files that fit rather than failing whole: the zones that take a set (the two GCR sheets,
+    // files that fit rather than failing whole: the zones that take a set (a pair of sheets,
     // base + Pegging) would otherwise lose a valid workbook because its partner was too big.
     const ok = named.filter(f => f.size <= maxBytes)
     const tooBig = named.filter(f => f.size > maxBytes)

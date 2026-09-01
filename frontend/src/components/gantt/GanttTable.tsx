@@ -32,7 +32,7 @@ function centerDeltaFor(cell: HTMLElement, w: Window): number {
 // Cache-busting version for the /public worker (not handled by Next HMR). Bump this on
 // every change to gantt-table-worker.js so browsers fetch the new worker instead of a
 // stale cached copy. yyyymmddN.
-const WORKER_VERSION = '2026090101'
+const WORKER_VERSION = '2026090102'
 
 /** Expansion state of the Schedule tree, BOTH tiers. Workstation ↔ Componente: `base` is the
  *  bulk default (Expand All = true / Collapse All = false); `exceptions` holds the individually

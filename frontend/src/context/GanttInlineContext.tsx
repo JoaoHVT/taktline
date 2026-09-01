@@ -35,7 +35,7 @@ export interface GanttInlineSnapshot {
   /** Tipo KEYS the load was opened with.
    *
    *  `lineFilter` cannot stand in for this. It is a list of Schedule "Linha" values, and a Tipo
-   *  whose hours do not come from the Schedule contributes no Linha at all — GCR is invisible
+   *  whose hours do not come from the Schedule contributes no Linha at all — it is invisible
    *  in it whether it was selected or not. The page needs the selection itself to know whether
    *  to show that Tipo's card. */
   lineTypes: string[] | null
@@ -80,9 +80,9 @@ interface GanttInlineState extends GanttInlineSnapshot {
   summaryTestData: SummaryTestResult | null
   summaryComputing: boolean
 
-  /** Rows of the published GCR plan, when the GCR Tipo is part of the loaded selection.
+  /** Rows of a published plan, when a Tipo not backed by the Schedule is in the selection.
    *
-   *  Kept OUT of `summaryTestData`: that is the Schedule aggregation, and GCR has no Schedule
+   *  Kept OUT of `summaryTestData`: that is the Schedule aggregation, and such a Tipo has no
    *  behind it. The page renders it as its own Tipo card rather than folding it into a rollup
    *  built on groups it does not appear in. `null` = not selected, or not loaded yet. */
 
@@ -152,9 +152,6 @@ export function GanttInlineProvider({ children }: { children: React.ReactNode })
 
   const [pendingRollup, setPendingRollup] = useState<TransactedHoursRollup | null>(null)
   const [mainLocoNames, setMainLocoNames] = useState<TransactedHoursScope>(EMPTY_SCOPE)
-
-  // ── The GCR plan, on the same terms the Gantt loads it ──────────────────────────
-  // Fetched only when GCR is part of the loaded selection, and kept once fetched: a published
 
   const [summaryTestData,  setSummaryTestData]  = useState<SummaryTestResult | null>(null)
   const [summaryComputing, setSummaryComputing] = useState(false)

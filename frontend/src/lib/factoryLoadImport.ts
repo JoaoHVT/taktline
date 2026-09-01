@@ -26,7 +26,7 @@
  *   FW          → pass-through (normalised to digits, the form monthly_demand.fw uses)
  *   ESCOPO      → TIPO FW      (see the note on the vocabularies below)
  *   PART NUMBER → ITEM via ASSEMBLY when mapped, else the part number itself
- *   TIPO        → CLIENTE      as the owning ORG — GCM / GCR (see the note below)
+ *   CLIENTE     → CLIENTE      (the plan's own column, verbatim)
  *   LINHA       → FAMÍLIA      (Plano de Produção's LINHA column IS the family here)
  *   PART DESC   → DESCRIÇÃO    (Plano de Produção's DESCRIÇÃO column)
  *   QTD         → QTDE FW      (summed over the fiscal weeks in range)
@@ -36,18 +36,11 @@
  * Period: the fiscal WEEK is already on the row; the MONTH is the 4-4-5 month of that week
  * (`fwToMonth445`); the YEAR comes from the loaded período's own calendar (date_info).
  *
- * ── CLIENTE is the owning ORGANISATION, not the model ────────────────────────────────────
- * Plano de Produção's CLIENTE column is the MODELO (MX10AC, …). Imported verbatim it filled the
- * capacity workspace's Cliente filter with locomotive models, which is not what that filter
- * means there: it groups work by the organisation that owns it, and its GCM/GCR buttons split
- * the list by a plan-side convention (client codes of up to four letters are GCM). A model name
- * satisfies that rule by accident and lands in whichever half its spelling happens to fall.
- *
- * So the org is stated instead of guessed, taken from the row's Tipo through the registry in
- * `lib/tipos.ts` (New Locos and Propulsion are GCM; Overhaul and Motor Diesel are GCR) — with
- * one rule above it: a row from the published GCR plan carries Tipo `'gcr'` regardless of any
- * Schedule line building the same part, so it is always GCR. A Linha matching no registered
- * Tipo keeps its own CLIENTE value: unclassified work is not filed under either organisation.
+ * ── CLIENTE ──────────────────────────────────────────────────────────────────────────────
+ * The plan's own CLIENTE column, passed through. It used to be overwritten by the organisation
+ * owning the row's Tipo, because the capacity workspace's Cliente filter grouped work by
+ * business unit; with a single Tipo there is no such grouping left to impose, and a dropdown
+ * listing exactly what the rows carry is what that filter should have offered anyway.
  *
  * ── ESCOPO vs TIPO FW ────────────────────────────────────────────────────────────────────
  * They are the same KIND of value (a process step) but not the same vocabulary. Measured on
@@ -75,34 +68,17 @@
  * lost either. They are still counted in `unresolvedPns` so the import tab can say how many
  * arrived without a routing.
  *
- * ── THE PUBLISHED GCR PLAN ───────────────────────────────────────────────────────────────
- * The Plano de Produção grid is TWO sources in one index: the Schedule rows `buildPlanoRows`
- * lays out, and the published GCR plan appended after them (PlanoMensalTab). This adapter read
- * only the first, so GCR work was silently absent from the import — the grid the user is
- * looking at and the list they import from disagreed.
- *
- * Both now go through `gcrRowToPlano`, the SAME converter the grid uses, so the two cannot
- * drift. Two consequences follow from GCR rows not being Schedule rows, and both are handled
- * rather than papered over:
- *
- *   • PERIOD. A Schedule row's fiscal month is looked up from `date_info`; a GCR week can fall
- *     outside the loaded window entirely (plans run a full year, a loaded period rarely does).
- *     Those rows carry their own `year`/`month`, which is preferred over the calendar lookup —
- *     without it every out-of-window week failed the year filter CLOSED and vanished from the
- *     list and from the month dropdown alike.
- *   • ROUTING COVERAGE. Measured on the live plan: 27 of 219 GCR items resolve to an ASSEMBLY
- *     (Propulsion B3 maps almost completely; WGS & Transit, Motor Diesel B2 and Labs B1 map at
- *     0%), which is ~2/3 of the plan's hours arriving with no operations and 0 routed hours.
- *     That is a REPORTED state, not a hidden one: `coverage` below quantifies it and the import
- *     tab shows it. Unrouted items are still imported — the work is real and the catalog is
- *     what is incomplete — but they must never be mistakable for work that genuinely takes no
- *     hours. When the routing master grows to cover those areas they resolve on their own, with
- *     no change here.
+ * ── ROUTING COVERAGE ─────────────────────────────────────────────────────────────────────
+ * An item whose part number resolves to no ASSEMBLY arrives with no operations and 0 routed
+ * hours. That is a REPORTED state, not a hidden one: `coverage` below quantifies it and the
+ * import tab shows it. Unrouted items are still imported — the work is real and the catalog is
+ * what is incomplete — but they must never be mistakable for work that genuinely takes no
+ * hours. When the routing master grows to cover them they resolve on their own, with no change
+ * here.
  */
 import { getExcelItems } from '@/lib/api'
 import { fwToMonth445 } from '@/lib/ganttUtils'
 import { buildPlanoRows, type PlanoRow } from '@/lib/planoRows'
-import { orgOfTipo } from '@/lib/tipos'
 import type { GanttData, ImportItem, ImportFilterOptions, ExcelItemsParams, ExcelItemsResponse } from '@/lib/api'
 
 const U = (v: unknown) => String(v ?? '').trim().toUpperCase()
@@ -167,22 +143,17 @@ async function loadCatalog(): Promise<Map<string, ImportItem>> {
   return _catalog.p
 }
 
-/** One row's fiscal period: its OWN when it carries one, the Schedule calendar otherwise.
+/** One row's fiscal period, from the Schedule calendar.
  *
- *  GCR rows carry `year`/`month` because the plan already knows which 4-4-5 month each of its
- *  weeks belongs to — see PlanoMensalTab.PlanoRow. Preferring it is not a nicety: the calendar
- *  is built from the loaded period's `date_info`, so a plan week outside that window has no
- *  entry at all and the year filter (which fails CLOSED, correctly, for an unplaceable week)
- *  dropped the row from both the item list and the month dropdown.
- *
- *  Schedule rows never set the two fields, so this is a no-op for them and the calendar stays
- *  the only source — which keeps a fiscal week that straddles a month boundary landing exactly
- *  where `fwToMonth445` puts it. */
+ *  Rows used to be able to carry their own `year`/`month` — a second source stated the 4-4-5
+ *  month of each of its weeks, and the calendar built from the loaded `date_info` had no entry
+ *  for a week outside the window. Every row now comes from the Schedule, so the calendar is
+ *  the only source, and a fiscal week straddling a month boundary lands exactly where
+ *  `fwToMonth445` puts it. */
 function rowPeriod(
   row: PlanoRow,
   cal: Map<string, { ano: number; mes: number }>,
 ): { ano: number; mes: number } | undefined {
-  if (row.year && row.month) return { ano: row.year, mes: row.month }
   return cal.get(normalizeFw(row.fw))
 }
 
@@ -217,7 +188,7 @@ function makeFwFilters(params: ExcelItemsParams): {
 
   // A fiscal week that can be placed in NO period — neither by the row itself nor by the
   // calendar — cannot satisfy a year or month filter, and fails CLOSED rather than slipping
-  // past an active one. `per` is resolved by `rowPeriod`, which is what keeps a GCR week
+  // past an active one. `per` is resolved by `rowPeriod`, which is what keeps a fiscal week
   // outside the loaded window placeable at all.
   const optionFw = (fw: string, per: Period) => {
     if (!fw) return false
@@ -276,7 +247,7 @@ function splitQty(byFw: Map<string, Map<string, number>> | undefined): {
  * How much of what is being imported actually carries a routing.
  *
  * Exists because an unrouted item is INDISTINGUISHABLE from a routed one that happens to need
- * no hours: both arrive with operations resolving to nothing and 0 h. Without this the GCR
+ * no hours: both arrive with operations resolving to nothing and 0 h. Without this the plan
  * areas the catalog does not cover (~2/3 of the plan's hours) would read as work that costs
  * nothing, which is worse than their previous absence — absence is at least visible.
  *
@@ -348,7 +319,7 @@ export function factoryLoadScope(
  * `data` must already be windowed to the active period / line filter (the caller passes what
  * the Gantt is actually showing), so the quantities here match the Plano de Produção grid.
  *
- * `gcrRows` is the published GCR plan and is deliberately NOT windowed the same way: it is keyed
+ * A published plan would deliberately NOT be windowed the same way: it is keyed
  * by fiscal week and área, has no calendar dates and belongs to no Linha, so the launch scope
  * has nothing to narrow it BY. The filters in `params` still apply to it — through the row's own
  * fiscal period — which is the narrowing that means something for a plan.
@@ -400,7 +371,7 @@ export function buildFactoryLoadItems(
 
   for (const row of rows) {
     const fw = normalizeFw(row.fw)
-    // The row's OWN period when it has one (GCR), the Schedule calendar otherwise.
+    // The row's period, from the Schedule calendar.
     const per = rowPeriod(row, cal)
     if (!optionFw(fw, per)) continue
 
@@ -431,9 +402,10 @@ export function buildFactoryLoadItems(
     // FAMÍLIA is the plan's LINHA column, CLIENTE its own CLIENTE column — the dropdowns list
     // exactly what the rows carry, so filtering can never offer a value from the monthly plan.
     const familia = String(row.linhaSrc ?? '').trim()
-    // CLIENTE = the organisation that owns the row's Tipo (GCM / GCR). A row the registry does
-    // not classify keeps the plan's own value rather than being filed under either org.
-    const cliente = orgOfTipo(row.tipo) ?? String(row.cliente ?? '').trim()
+    // CLIENTE is the plan's own column. It used to be overridden by the organisation owning
+    // the row's Tipo; with a single Tipo there is no such grouping left to impose, and the
+    // dropdown listing exactly what the rows carry is the behaviour that was wanted anyway.
+    const cliente = String(row.cliente ?? '').trim()
     if (familia) familias.add(familia)
     if (cliente) clientes.add(cliente)
 

@@ -43,11 +43,7 @@ const BAND_H = 30           // container height; the extra room above the track 
 // `Record<TipoKey, …>` on purpose: registering a new Tipo must fail the build here rather
 // than render a locomotive with `undefined` for a livery.
 export const LINE_TYPE_COLORS: Record<TipoKey, string> = {
-  new_locos:    '#D32F2F',   // brand red
-  overhaul:     '#1565C0',   // the headcount blue
-  motor_diesel: '#92400E',   // the TOP amber
-  propulsion:   '#059669',   // the positive-impact green
-  gcr:          '#7C3AED',   // the violet already used elsewhere in the app
+  montagem: '#D32F2F',   // the app accent
 }
 
 /** Two neutral wagon shades — the "small visual variant", kept greyscale so wagons

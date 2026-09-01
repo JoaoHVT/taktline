@@ -238,7 +238,7 @@ interface ResumoGeralTabProps {
   allFws: string[]
   allAreas: string[]
   allModels: string[]
-  /** Schedule workstations UNION the GCR plan's Linhas (`useGanttFilters.allSummaryWorkstations`)
+  /** Schedule workstations (`useGanttFilters.allSummaryWorkstations`)
    *  — this tab shows both sources in one table, so its filter has to offer both vocabularies.
    *  NOT the Schedule panel's `allWorkstations`, which stays Schedule-only. */
   allWorkstations: string[]
@@ -345,7 +345,7 @@ export function ResumoGeralTab({
   // against nothing, the table would grow a phantom row for each área that exists only in the
   // empty side, and the chart would draw a flat line along the axis. That is precisely what a
   // selection whose hours come from OUTSIDE the Schedule produces — the deviation reference is
-  // aggregated under the same Tipo filter, so a GCR-only view references exactly zero. Nulling it
+  // aggregated under the same Tipo filter, so a view with no Schedule references exactly zero. Nulling it
   // here makes every consumer behave as if no comparison were armed, which is the truth.
   const comparisonSummary = useMemo(
     () => {
@@ -473,7 +473,7 @@ export function ResumoGeralTab({
   const [chartPicked, setChartPicked] = useState<Set<string>>(new Set())
   /** Is the "Locos" grouping meaningful for what is selected?
    *
-   *  Only if at least one selected Tipo actually HAS locomotives. A GCR-only selection plans
+   *  Only if at least one selected Tipo actually HAS locomotives. A selection that plans
    *  parts, so the Locos table would render empty — and an empty table is indistinguishable
    *  from a bug. An EMPTY selection counts as available: that is "no filter", not "only Tipos
    *  without LOCOs", and it must keep behaving exactly as it always has. */
@@ -548,7 +548,7 @@ export function ResumoGeralTab({
 
   if (!summaryTestReady) return null
   // Ready, not computing, and still nothing. Previously this rendered NOTHING — an entirely
-  // blank tab, which is indistinguishable from a broken one and was exactly what a GCR-only
+  // blank tab, which is indistinguishable from a broken one and was exactly what a Schedule-less
   // load looked like when its plan failed to arrive. Say what happened instead.
   if (!summaryTestData) {
     return (
@@ -735,7 +735,7 @@ export function ResumoGeralTab({
   // established pattern; the work is O(entities) and dwarfed by the table's own render cost.
   // A comparison needs something to compare AGAINST. `totalHours > 0` is that test, and it is
   // not defensive padding: the deviation reference is aggregated under the SAME Tipo filter as
-  // the current view, so a selection whose hours come from outside the Schedule (GCR) produces
+  // the current view, so a selection whose hours come from outside the Schedule produces
   // a reference of exactly zero. Every cell would then carry a "+∞ / +100%" badge measured
   // against nothing — a wall of red arrows that says only "the baseline is empty", on every row
   // of the table at once. Below the test, the tab behaves as if no comparison were armed.
@@ -914,7 +914,7 @@ export function ResumoGeralTab({
               //             for schedule-backed Tipos, which is where `availableLineTypes` comes
               //             from (it is derived from the Schedule's own Linhas). A Tipo with no
               //             Schedule behind it never appears there and must not be judged by it,
-              //             or GCR would be permanently greyed out the moment it was loaded.
+              //             or such a Tipo would be permanently greyed out the moment it was loaded.
               const loaded  = loadedLineTypes.size === 0 || loadedLineTypes.has(lt.key)
               const hasData = !isScheduleBacked(lt.key) || availableLineTypes.has(lt.key)
               const usable  = loaded && hasData
@@ -1087,14 +1087,14 @@ export function ResumoGeralTab({
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 <span style={{ fontSize: 10, fontWeight: 700, color: '#9CA3AF', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Agrupamento</span>
                 {/* Locos is unavailable when there is nothing with LOCOs on screen — a
-                    GCR-only selection plans PARTS, and the Locos view would be an empty table
+                    such a selection plans PARTS, and the Locos view would be an empty table
                     with no explanation. Disabled and labelled rather than hidden. */}
                 <RedSegment
                   options={[{ key: 'area', label: 'Área' }, { key: 'locos', label: 'Locos' }] as const}
                   value={rowMode} onChange={setRowMode}
                   disabled={locoViewAvailable ? undefined : (['locos'] as const)}
                   titleFor={k => (k === 'locos' && !locoViewAvailable)
-                    ? 'Os Tipos selecionados não possuem LOCO (GCR planeja peças, não locomotivas).'
+                    ? 'Os Tipos selecionados não possuem LOCO (planejam peças, não locomotivas).'
                     : undefined}
                 />
               </div>

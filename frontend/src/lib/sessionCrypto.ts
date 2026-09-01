@@ -12,7 +12,7 @@
  *     crypto envelope (salt / iv / ciphertext) — no business data.
  *   - Integrity / tamper detection: AES-GCM's authentication tag makes ANY
  *     edit to the ciphertext (or a swapped salt/iv) fail decryption. The
- *     envelope parameters are additionally bound as GCM "additional data".
+ *     envelope parameters are additionally bound as AES-GCM "additional data".
  *   - Possessing the JSON alone is insufficient: without the password the
  *     contents are unrecoverable (there is no recovery — by design).
  *

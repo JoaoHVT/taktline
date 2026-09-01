@@ -166,14 +166,13 @@ function SpinnerCard({ height = 120 }: { height?: number }) {
  *  `masc` picks the agreement in the alt text ("Motor Diesel iniciado", not "iniciada").
  *
  *  Tipos absent from this map keep an empty (but reserved) slot, so names stay aligned. */
+//  EMPTY IN THIS BUILD. Each entry was a pair of product renders belonging to one Tipo, and
+//  both the renders and the Tipos they depicted are gone. The map itself stays: it is what
+//  makes registering a Tipo with no icon a visible, reserved-slot outcome instead of a
+//  layout that shifts, and the lookup below already handles a Tipo that is absent from it.
 const TYPE_ICONS: Partial<Record<TipoKey, {
   started: string; standby: string; noun: string; masc?: boolean; blend?: boolean
-}>> = {
-  new_locos:    { started: '/imagens/ES_SIDE.png',         standby: '/imagens/ES_FRONT.png',         noun: 'Locomotiva' },
-  propulsion:   { started: '/imagens/PROPULSION_SIDE.png', standby: '/imagens/PROPULSION_FRONT.png', noun: 'Propulsão' },
-  motor_diesel: { started: '/imagens/DIESEL_SIDE.png',     standby: '/imagens/DIESEL_FRONT.png',     noun: 'Motor Diesel', masc: true },
-  overhaul:     { started: '/imagens/OVERHAUL_SIDE.png',   standby: '/imagens/OVERHAUL_FRONT.png',   noun: 'Overhaul',     masc: true },
-}
+}>> = {}
 
 /** Fixed-width slot for the per-Tipo row icon.
  *
@@ -643,15 +642,6 @@ export function FactoryLoadHome() {
     })
   }, [hierarchy, rollup])
 
-  // ── The GCR Tipo: one card, no drill-down ───────────────────────────────────
-  //
-  // A LEAF TypeNode — `models: []`. That is not a degenerate case to work around, it is the
-  // shape of the Tipo: GCR plans PARTS and has no locomotives (`tipoHasLoco` is false for it),
-  // so there is nothing under the card to open. Every level of this tree below Tipo is
-  // Modelo → Loco, and rendering an expandable card onto an empty one would be a chevron that
-  // opens nothing.
-  //
-
   const sections = useMemo<TypeNode[]>(() => merged, [merged])
 
   // ── Expand/collapse state per level ──────────────────────────────────────────
@@ -678,7 +668,7 @@ export function FactoryLoadHome() {
   const statusOf = (l: LocoNode): LocoStatus => classifyLocoStatus(l.startIso, l.finishIso, today)
   const statusCountsOf = (locos: LocoNode[]) => tallyStatuses(locos.map(statusOf))
 
-  // The GCR fetch counts as loading too: for a GCR-ONLY selection the Schedule side finishes
+  // A second-source fetch counts as loading too: with no Schedule the Schedule side finishes
   // immediately with nothing in it, so without this the page showed "Nenhuma locomotiva" until
   // the plan landed — an empty-state message for data that was still on its way.
   const loadingContent = inline.summaryComputing || !inline.summaryTestData 
@@ -800,7 +790,7 @@ export function FactoryLoadHome() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {sections.map(t => {
-              // A Tipo with no Modelo level is a LEAF (GCR): the card shows its hours and does
+              // A Tipo with no Modelo level is a LEAF: the card shows its hours and does
               // not open. Rendered as a plain div, not a disabled button — there is no action
               // here to disable, and a button that never does anything still invites the click.
               const leaf = t.models.length === 0

@@ -13,7 +13,7 @@ export function SavePasswordModal({ onConfirm, onClose, title, message }: {
   onConfirm: (password: string) => void
   onClose: () => void
   /** Header text. Defaults to the schedule wording this dialog was written for; a second
-   *  caller (publishing the GCR plan) passes its own, because a dialog that says "alterações
+   *  caller passes its own, because a dialog that says "alterações
    *  no schedule" while publishing a plan is telling the user the wrong thing about what the
    *  password is authorizing. */
   title?: string

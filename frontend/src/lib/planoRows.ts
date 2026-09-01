@@ -28,46 +28,14 @@ export interface PlanoRow {
   partDesc:    string   // PART DESC
   escopo:      string   // ESCOPO
   linhaSrc:    string   // LINHA (the routing sheet's own column, not the loco's Schedule line)
-  /** Tipo Geral of the row's source: the Schedule Linha's classification for a Schedule row,
-   *  `'gcr'` for a published-plan row (stamped by source — see `tipos.ts`). `'other'` when the
+  /** Tipo Geral of the row's source: the Schedule Linha's classification. `'other'` when the
    *  Linha matches no registered Tipo.
    *
    *  Carried on the row because it cannot be recovered downstream: the row keeps the LOCO and
-   *  the MODELO, never the Schedule Linha it was classified from. The capacity import reads it
-   *  to file each item under the organisation that owns its Tipo. */
+   *  the MODELO, never the Schedule Linha it was classified from. */
   tipo:        TipoGeral
-  /** This row came from the published GCR plan, not from the Schedule.
-   *
-   *  The two sources produce the SAME row shape — that is why they can share this grid — but
-   *  they are not comparable in one respect: a Schedule row has a base scenario to deviate
-   *  FROM, and a GCR row does not. It is a plan, not a schedule; there is no unedited version
-   *  of it to measure against. So the flag exists to keep GCR rows out of the deviation strip,
-   *  where they would otherwise read as hours that appeared from nowhere.
-   *
-   *  Optional: every Schedule-built row leaves it undefined, so nothing about them changes. */
-  gcr?:        true
-  /** The row's own FISCAL period, carried by GCR rows only.
-   *
-   *  A Schedule row's period is looked up from `fwToMonth`, derived from the loaded
-   *  `date_info` — and a GCR week can fall outside the Schedule's window entirely, or there
-   *  may be no Schedule loaded at all. The plan already knows which 4-4-5 month each of its
-   *  weeks belongs to, so the row carries it instead of the grid re-deriving it. */
-  year?:       number
-  month?:      number
 }
 
-/**
- * A published GCR plan row in this grid's shape.
- *
- * The field mapping is the plan's own vocabulary, stated by the plan itself. HorasGCR carries
- * BOTH columns and the plan keeps them apart, so this grid does too — the two were crossed here,
- * which put the LOCAL under the LINHA header and the Linha under LOCAL:
- *     área → AREA · LOCAL → LOCAL · Linha → LINHA · item → ITEM
- *
- * `loco` is EMPTY and stays empty — GCR plans parts, and there is no locomotive to name.
- * `displayWorkorder` already renders a blank loco as the bare work order, so the WORKORDER
- * column reads `MRS-GMG192-DATA` rather than a stray leading dash.
- */
 function joinWsDesc(ws: string, desc: string, joiner: string): string {
   const w = (ws ?? '').toString()
   const d = (desc ?? '').toString()
@@ -140,10 +108,8 @@ export function buildPlanoRows(
   }
 
   for (const group of data.groups) {
-    // Type of this locomotive line (Propulsion / New Locos / …). Propulsion gets the
-    // whole-work-order allocation below (sequence-preserving, integer, no cross-week split).
+    // Tipo of this locomotive line, carried onto every row it produces.
     const tipo = locoTypeOf(group.linha)
-    const isPropulsion = tipo === 'propulsion'
     for (const ws of group.workstations) {
       const area = ws.area ?? ''      // AREA: the area value for this workstation
       for (const dr of ws.desc_rows) {
@@ -259,97 +225,23 @@ export function buildPlanoRows(
           return m
         })
 
-        // ── Propulsion: whole work orders, never split across weeks ──────────────────
-        // For Type = Propulsion three planning rules override the exact schedule split (small
-        // divergences from Schedule/Resumo Geral are accepted, by design):
-        //   1) SEQUENCE — a lower-numbered WO never lands in a later week than a higher one;
-        //   2) INTEGER  — a WO keeps its whole quantity (no fractional units);
-        //   3) NO SPLIT — 100% of a WO goes to ONE week (the one holding most of its hours).
-        // Collapse each WO to its majority week (greatest hours ≈ most days), then re-pair the
-        // chosen weeks — sorted chronologically — with the WOs in ascending number order. That
-        // preserves how many WOs land in each week while guaranteeing the sequence, matching
-        // "FW1: WO01,WO02 · FW2: WO03,WO04". Each WO then has a single FW carrying all its hours,
-        // so the qty apportionment below yields the whole integer quantity in that one week.
-        if (isPropulsion) {
-          const chosen = unitFwHh.map((m, ui) => {
-            const entries = Object.entries(m)
-            if (entries.length === 0) return null
-            let best = entries[0]
-            for (const e of entries) {
-              if (e[1] > best[1] + 1e-9 ||
-                  (Math.abs(e[1] - best[1]) < 1e-9 &&
-                   (fwOrder.get(e[0]) ?? 1e9) < (fwOrder.get(best[0]) ?? 1e9))) best = e
-            }
-            const visible = entries.reduce((s, [, h]) => s + h, 0)
-            // ── A work order clipped by the loaded period ────────────────────────────────
-            // The period filter (`gantt_builder._filter_records`) drops DAYS outside the
-            // window, but QTD and HH UNIT ride on every surviving day record, so a WO that
-            // straddles the edge keeps its WHOLE quantity while only the days inside the
-            // window keep hours. Under rule 2 the qty apportionment below then awards the
-            // whole unit against a fraction of its work: the row reads QTDE 1 · HH TOTAL
-            // 5,37 against an HH UNIT of 21,50, and the item's total falls short of
-            // QTDE × HH UNIT — which is exactly the gap Análise de Capacidade reports,
-            // since it prices the QUANTITY through the routing master.
-            //
-            // Rules 2 and 3 already say a Propulsion WO is ATOMIC — whole quantity, one
-            // week — so its hours are its source hours, and a window that cuts the calendar
-            // must not cut the work content. Restored only when the WO actually touches the
-            // window's edge, so a "Horas totais" override (which legitimately rescales the
-            // cells and leaves HH UNIT alone) is never overwritten mid-period.
-            const srcHours = (orderedUnits[ui].qtd ?? 0) * (orderedUnits[ui].hh_unit ?? 0)
-            const clipped = srcHours > visible + 0.01 && touchesWindowEdge(orderedUnits[ui].cells)
-            return { fw: best[0], hours: clipped ? srcHours : visible }
-          })
-          // ONE SLOT PER WORK ORDER, NOT PER UNIT. Rule 3 says a work order occupies ONE week,
-          // and the (WORKORDER, ESCOPO) buckets of a work order ARE that work order — handing each
-          // scope its own slot split a single WO across weeks (Montagem in one, Peritagem in the
-          // next), breaking the very rule this block exists to enforce. Each group votes for its
-          // week with its own hours, and every scope of it then rides that one week.
-          const grpFw = woGroups.map(g => {
-            const tally: Record<string, number> = {}
-            for (const ui of g) { const c = chosen[ui]; if (c) tally[c.fw] = (tally[c.fw] ?? 0) + c.hours }
-            const entries = Object.entries(tally)
-            if (entries.length === 0) return null
-            let best = entries[0]
-            for (const e of entries) {
-              if (e[1] > best[1] + 1e-9 ||
-                  (Math.abs(e[1] - best[1]) < 1e-9 &&
-                   (fwOrder.get(e[0]) ?? 1e9) < (fwOrder.get(best[0]) ?? 1e9))) best = e
-            }
-            return best[0]
-          })
-          const slots = grpFw
-            .filter((f): f is string => f != null)
-            .sort((a, b) => (fwOrder.get(a) ?? 1e9) - (fwOrder.get(b) ?? 1e9))
-          let si = 0
-          woGroups.forEach((g, gi) => {
-            const fw = grpFw[gi] != null ? slots[si++] : null
-            for (const ui of g) {
-              const c = chosen[ui]
-              unitFwHh[ui] = (fw && c) ? { [fw]: c.hours } : {}
-            }
-          })
-        }
-
-        // ── Every OTHER type: the same clipped work order, restored in place ─────────────
-        // The window cut is not a Propulsion phenomenon — `gantt_builder._filter_records` drops
-        // days outside the loaded period for every line. What differs is only WHERE the loss
-        // shows: a Propulsion WO collapses to one week (handled above), while any other type
-        // keeps whichever weeks survived. QTD and HH UNIT ride on every surviving day record, so
-        // the WO keeps its WHOLE quantity against a fraction of its hours, and the row reads e.g.
-        // QTDE 1 · HH UNIT 22 · HH TOTAL 5 — the FW53 rows at the tail of the loaded range are
-        // the usual case, since that is where the calendar runs out. Análise de Capacidade prices
-        // the QUANTITY through the routing master, so that shortfall is exactly the divergence it
-        // reports between the two views.
+        // ── A work order clipped by the loaded period, restored in place ───────────────
+        // `gantt_builder._filter_records` drops days outside the loaded period, but QTD and
+        // HH UNIT ride on every surviving day record — so a WO straddling the edge keeps its
+        // WHOLE quantity against a fraction of its hours, and the row reads e.g. QTDE 1 ·
+        // HH UNIT 22 · HH TOTAL 5. The FW at the tail of the loaded range is the usual case,
+        // since that is where the calendar runs out. Análise de Capacidade prices the QUANTITY
+        // through the routing master, so that shortfall is exactly the divergence it reports
+        // between the two views.
         //
         // A part number's work content is a property of the part, not of the period the user
-        // happened to load, so the WO's hours are scaled back up to `qtd × hh_unit`. The surviving
-        // weeks keep their PROPORTIONS — nothing is moved into a week the schedule never used, and
-        // the quantity apportionment below (a ratio of the same hours) is unchanged by a uniform
-        // factor. Gated on the WO actually touching a window edge, for the same reason as above:
-        // a "Horas totais" override legitimately rescales the cells while leaving HH UNIT alone,
+        // happened to load, so the WO's hours are scaled back up to `qtd × hh_unit`. The
+        // surviving weeks keep their PROPORTIONS — nothing is moved into a week the schedule
+        // never used, and the quantity apportionment below (a ratio of the same hours) is
+        // unchanged by a uniform factor. Gated on the WO actually touching a window edge: a
+        // "Horas totais" override legitimately rescales the cells while leaving HH UNIT alone,
         // and must not be overwritten mid-period.
-        if (!isPropulsion) {
+        {
           for (let ui = 0; ui < unitFwHh.length; ui++) {
             const m = unitFwHh[ui]
             const visible = Object.values(m).reduce((s, h) => s + h, 0)

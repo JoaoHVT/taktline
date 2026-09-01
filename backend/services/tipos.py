@@ -33,11 +33,10 @@ class TipoDef:
     has_loco: bool = True
 
 
+# One Tipo, two Linhas: the lines are parallel streams of the same kind of work, which is what
+# a Linha is for. They stay distinct because the per-stream rules read them.
 TIPOS: tuple[TipoDef, ...] = (
-    TipoDef("new_locos",    "New Locos",    ("Special Line", "Main Line")),
-    TipoDef("overhaul",     "Overhaul",     ("Overhaul",)),
-    TipoDef("motor_diesel", "Motor Diesel", ("Motor Diesel",)),
-    TipoDef("propulsion",   "Propulsion",   ("Propulsion",)),
+    TipoDef("montagem", "Montagem", ("Linha 1", "Linha 2")),
 )
 
 TIPO_KEYS: tuple[str, ...] = tuple(t.key for t in TIPOS)

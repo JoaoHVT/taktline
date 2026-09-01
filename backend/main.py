@@ -3651,15 +3651,15 @@ def calendar_date_info(
     WHY THIS EXISTS. Every period axis in the app — activeYearMonths, activeFws,
     monthBusinessDays, fwBusinessDays, the fiscal-week ordering — is derived from the
     `date_info` the Gantt returns alongside the Schedule. A surface with no Schedule behind it
-    (the GCR plan) therefore has no axis at all and renders empty, however many hours it holds.
-    This is the same calendar with the Schedule taken out of it, so those derivations work
-    unchanged and no client-side code re-invents fiscal weeks.
+    therefore has no axis at all and renders empty, however many hours it holds. This is the
+    same calendar with the Schedule taken out of it, so those derivations work unchanged and no
+    client-side code re-invents fiscal weeks.
 
     Deliberately NOT `/api/calendar`, which is Admin-only: that route returns the override
     ROWS and the editing surface behind the Manage Calendar screen. This one returns only the
     computed working calendar — the same non-sensitive company-holiday shape
     `/api/calendar/exceptions` already serves to every authenticated user — so it is
-    `require_auth`, and Readers can open a GCR plan.
+    `require_auth`.
 
     `is_weekend` here is the PLAIN weekend (minus admin-declared exceptional working days).
     The Schedule's own version additionally un-weekends a Saturday that carries a real
