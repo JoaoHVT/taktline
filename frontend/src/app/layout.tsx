@@ -8,9 +8,9 @@ export const metadata: Metadata = {
   title: 'Taktline',
   description: 'Sistema de otimização de alocação de pessoas por WSN',
   icons: {
-    icon: '/imagens/wab1.png',
-    shortcut: '/imagens/wab1.png',
-    apple: '/imagens/wab1.png',
+    icon: '/imagens/mark.svg',
+    shortcut: '/imagens/mark.svg',
+    apple: '/imagens/mark.svg',
   },
 }
 

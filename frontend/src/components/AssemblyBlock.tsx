@@ -192,7 +192,7 @@ export function AssemblyBlock({
     setTimeout(() => setCopied(false), 1200)
   }
 
-  const badgeBg = totalH > 0 ? '#D32F2F' : '#9E9E9E'
+  const badgeBg = totalH > 0 ? '#0D9488' : '#9E9E9E'
 
   // Effective description: prefer detail.descricao, fall back to import item description
   const displayDesc = detail.descricao || fallbackDescricao
@@ -238,7 +238,7 @@ export function AssemblyBlock({
                   >
                     <img src="/imagens/warning.png" alt="Gargalo" style={{ width: 11, height: 11 }} />
                     {bottleneckUnserved > 0 && (
-                      <span className="text-[9px] font-bold tabular-nums" style={{ color: '#C62828' }}>
+                      <span className="text-[9px] font-bold tabular-nums" style={{ color: '#0D9488' }}>
                         {bottleneckUnserved}un
                       </span>
                     )}

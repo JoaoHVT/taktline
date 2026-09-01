@@ -113,7 +113,7 @@ function ToolBtn({
         ${disabled
           ? 'opacity-35 cursor-not-allowed'
           : active
-            ? 'bg-[#D32F2F] hover:bg-[#B71C1C]'
+            ? 'bg-[#0D9488] hover:bg-[#0F766E]'
             : `hover:bg-gray-200 active:bg-gray-300 ${wave ? 'simular-wave-btn' : ''}`}
       `}
       style={{ height: h, minWidth: 40 }}
@@ -157,7 +157,7 @@ function ActionBtn({
         ${disabled
           ? 'opacity-35 cursor-not-allowed'
           : active
-            ? 'bg-[#D32F2F] hover:bg-[#B71C1C]'
+            ? 'bg-[#0D9488] hover:bg-[#0F766E]'
             : `hover:bg-gray-200 active:bg-gray-300 ${wave ? 'simular-wave-btn' : ''}`}
       `}
       style={{ height: 48, minWidth: 52 }}
@@ -190,7 +190,7 @@ function NavBtn({
   className?: string
 }) {
   const toneClass = tone === 'red'
-    ? 'hover:bg-red-50 hover:text-[#C62828]'
+    ? 'hover:bg-red-50 hover:text-[#0D9488]'
     : tone === 'green'
       ? 'hover:bg-green-50 hover:text-[#2E7D32]'
       : tone === 'amber'
@@ -207,7 +207,7 @@ function NavBtn({
         ${disabled
           ? 'opacity-35 cursor-not-allowed'
           : active
-            ? 'bg-[#D32F2F] hover:bg-[#B71C1C]'
+            ? 'bg-[#0D9488] hover:bg-[#0F766E]'
             : toneClass
         } ${className}`}
       style={{ height: 40, minWidth: 40 }}
@@ -316,7 +316,7 @@ function FilterDropdown({ label, options, selected, onChange, img, emptyMsg, pan
           onClick={() => options.length > 0 && setOpen(v => !v)}
           className={`flex items-center justify-between gap-2 min-w-[130px] px-2.5 py-1.5 rounded border text-xs transition-colors ${
             isActive
-              ? 'border-[#D32F2F] bg-[#D32F2F]/5 text-[#B71C1C] font-semibold'
+              ? 'border-[#0D9488] bg-[#0D9488]/5 text-[#0F766E] font-semibold'
               : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50'
           }`}
         >
@@ -352,7 +352,7 @@ function FilterDropdown({ label, options, selected, onChange, img, emptyMsg, pan
                 onClick={toggleAll}
               >
                 {allSelected
-                  ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                  ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                   : <Square      size={12} className="text-gray-400 shrink-0" />}
                 {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
               </div>
@@ -363,7 +363,7 @@ function FilterDropdown({ label, options, selected, onChange, img, emptyMsg, pan
                   onClick={() => toggleOne(opt)}
                 >
                   {selected.has(opt)
-                    ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                    ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                     : <Square      size={12} className="text-gray-400 shrink-0" />}
                   <span className="truncate">{opt}</span>
                 </div>
@@ -420,7 +420,7 @@ function TipoDropdown({ options, selected, onChange, panelMode }: {
           onClick={() => options.length > 0 && setOpen(v => !v)}
           className={`flex items-center justify-between gap-2 min-w-[130px] px-2.5 py-1.5 rounded border text-xs transition-colors ${
             isActive
-              ? 'border-[#D32F2F] bg-[#D32F2F]/5 text-[#B71C1C] font-semibold'
+              ? 'border-[#0D9488] bg-[#0D9488]/5 text-[#0F766E] font-semibold'
               : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50'
           }`}
         >
@@ -452,7 +452,7 @@ function TipoDropdown({ options, selected, onChange, panelMode }: {
             onClick={toggleAll}
           >
             {allSelected
-              ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+              ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
               : <Square      size={12} className="text-gray-400 shrink-0" />}
             {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
           </div>
@@ -466,7 +466,7 @@ function TipoDropdown({ options, selected, onChange, panelMode }: {
                 onClick={() => toggleOne(v)}
               >
                 {isSel
-                  ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                  ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                   : <Square      size={12} className="text-gray-400 shrink-0" />}
                 {v}
               </div>
@@ -544,7 +544,7 @@ function WsnDropdown({ options, selected, onChange, bottleneckWsns, panelMode }:
           onClick={() => options.length > 0 && setOpen(v => !v)}
           className={`flex items-center justify-between gap-2 min-w-[130px] px-2.5 py-1.5 rounded border text-xs transition-colors ${
             isActive
-              ? 'border-[#D32F2F] bg-[#D32F2F]/5 text-[#B71C1C] font-semibold'
+              ? 'border-[#0D9488] bg-[#0D9488]/5 text-[#0F766E] font-semibold'
               : 'border-gray-300 bg-white text-gray-600 hover:border-gray-400 hover:bg-gray-50'
           }`}
         >
@@ -559,7 +559,7 @@ function WsnDropdown({ options, selected, onChange, bottleneckWsns, panelMode }:
           title={tooltipText}
           onClick={() => options.length > 0 && setOpen(v => !v)}
           className={`flex flex-col items-center justify-center gap-0.5 px-2 py-0.5 rounded transition-colors ${
-            isActive ? 'bg-[#D32F2F] hover:bg-[#B71C1C]' : 'hover:bg-gray-200 active:bg-gray-300'
+            isActive ? 'bg-[#0D9488] hover:bg-[#0F766E]' : 'hover:bg-gray-200 active:bg-gray-300'
           }`}
           style={{ height: 40, minWidth: 40 }}
         >
@@ -588,8 +588,8 @@ function WsnDropdown({ options, selected, onChange, bottleneckWsns, panelMode }:
                     title={`Gargalos — workstations com gargalo (${bottleneckOptions.length})`}
                     className="flex-1 py-0.5 rounded text-[10px] font-bold border transition-colors"
                     style={activeGargalos
-                      ? { backgroundColor: '#D32F2F', color: 'white', borderColor: '#D32F2F' }
-                      : { backgroundColor: 'white',   color: '#D32F2F', borderColor: '#D32F2F' }}
+                      ? { backgroundColor: '#0D9488', color: 'white', borderColor: '#0D9488' }
+                      : { backgroundColor: 'white',   color: '#0D9488', borderColor: '#0D9488' }}
                   >Gargalos</button>
                 </div>
               )}
@@ -598,7 +598,7 @@ function WsnDropdown({ options, selected, onChange, bottleneckWsns, panelMode }:
                 onClick={toggleAll}
               >
                 {allSelected
-                  ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                  ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                   : <Square      size={12} className="text-gray-400 shrink-0" />}
                 {allSelected ? 'Desmarcar todos' : 'Selecionar todos'}
               </div>
@@ -612,11 +612,11 @@ function WsnDropdown({ options, selected, onChange, bottleneckWsns, panelMode }:
                     onClick={() => toggleOne(opt.wsn)}
                   >
                     {isSel
-                      ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                      ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                       : <Square      size={12} className="text-gray-400 shrink-0" />}
                     <div className="min-w-0 flex flex-col">
                       <span className="truncate inline-flex items-center gap-1" title={isBottleneck ? 'WSN gargalo após otimização' : undefined}>
-                        <span className={isBottleneck ? 'font-semibold text-[#C62828] modo-wave-label' : ''}>{opt.wsn}</span>
+                        <span className={isBottleneck ? 'font-semibold text-[#0D9488] modo-wave-label' : ''}>{opt.wsn}</span>
                         {isBottleneck && (
                           <img src="/imagens/warning.png" alt="Gargalo" style={{ width: 11, height: 11, opacity: 0.85 }} />
                         )}
@@ -820,7 +820,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
   const canShowHeadcountMenu = canImport && mode === 'analise'
   // Avatar circle tint by permission level (same palette as Manage Users):
   // Reader → grey, Editor → amber, Admin → red. Initials stay unchanged.
-  const roleBadgeColor = role === 'admin' ? '#D32F2F' : role === 'editor' ? '#D97706' : '#9CA3AF'
+  const roleBadgeColor = role === 'admin' ? '#0D9488' : role === 'editor' ? '#D97706' : '#9CA3AF'
   const [userMenu, setUserMenu] = useState<{ x: number; y: number } | null>(null)
   // "+" extras menu beside the avatar (Editor+). Kept separate from `userMenu` so the
   // avatar's own right-click menu keeps its admin-only item set unchanged.
@@ -1638,7 +1638,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                   >
                     {/* Factory glyph — Plano Mensal already owns boxes.png; the two entries
                         used the SAME icon, so the source was unreadable at a glance. */}
-                    <Factory size={18} className={factoryLoadReady ? 'text-[#D32F2F]' : 'text-gray-400'} />
+                    <Factory size={18} className={factoryLoadReady ? 'text-[#0D9488]' : 'text-gray-400'} />
                     <div>
                       <p className="text-xs font-semibold text-gray-800">Carga de Fábrica</p>
                       <p className="text-[11px] text-gray-500">Simular a carga de fábrica</p>
@@ -1664,10 +1664,10 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
               />
               {noItemsWarning && (
                 <div className="absolute top-full left-1/2 -translate-x-1/2 mt-1.5 z-50 pointer-events-none">
-                  <div className="bg-[#B71C1C] text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-1.5">
+                  <div className="bg-[#0F766E] text-white text-[10px] font-semibold px-2.5 py-1.5 rounded-lg shadow-lg whitespace-nowrap flex items-center gap-1.5">
                     <span>⚠️</span>
                     <span>Adicione itens primeiro</span>
-                    <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-0 h-0" style={{ borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderBottom: '6px solid #B71C1C' }} />
+                    <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 w-0 h-0" style={{ borderLeft: '6px solid transparent', borderRight: '6px solid transparent', borderBottom: '6px solid #0F766E' }} />
                   </div>
                 </div>
               )}
@@ -1690,9 +1690,9 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                 title={!ganttFiltersReady ? 'Carregue um período pelo botão Gantt para filtrar' : undefined}
                 className={`w-[104px] flex items-center justify-between px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
                   dateFiltersOpen
-                    ? 'bg-[#D32F2F] text-white hover:bg-[#B71C1C]'
+                    ? 'bg-[#0D9488] text-white hover:bg-[#0F766E]'
                     : ganttDateFilterCount > 0
-                      ? 'bg-[#D32F2F]/10 text-[#B71C1C] hover:bg-[#D32F2F]/20'
+                      ? 'bg-[#0D9488]/10 text-[#0F766E] hover:bg-[#0D9488]/20'
                       : 'text-gray-600 hover:bg-gray-200'
                 }`}
                 style={{ height: 40 }}
@@ -1702,7 +1702,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                   <span>Datas</span>
                   {ganttDateFilterCount > 0 && (
                     <span className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full text-[10px] font-bold px-1 ${
-                      dateFiltersOpen ? 'bg-white/20 text-white' : 'bg-[#D32F2F] text-white'
+                      dateFiltersOpen ? 'bg-white/20 text-white' : 'bg-[#0D9488] text-white'
                     }`}>
                       {ganttDateFilterCount}
                     </span>
@@ -1719,7 +1719,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                     <button
                       type="button"
                       onClick={() => ganttInline.clearDateFilters()}
-                      className="text-[12px] text-[#C62828] font-semibold hover:text-[#B71C1C] inline-flex items-center gap-1"
+                      className="text-[12px] text-[#0D9488] font-semibold hover:text-[#0F766E] inline-flex items-center gap-1"
                       title="Limpar filtros de data"
                     >
                       <X size={12} />
@@ -1763,9 +1763,9 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
               }
               className={`w-[112px] flex items-center justify-between px-3 py-1.5 rounded text-xs font-semibold transition-colors ${
                 filtersOpen
-                  ? 'bg-[#D32F2F] text-white hover:bg-[#B71C1C]'
+                  ? 'bg-[#0D9488] text-white hover:bg-[#0F766E]'
                   : filtrosHasActive
-                    ? 'bg-[#D32F2F]/10 text-[#B71C1C] hover:bg-[#D32F2F]/20'
+                    ? 'bg-[#0D9488]/10 text-[#0F766E] hover:bg-[#0D9488]/20'
                     : 'text-gray-600 hover:bg-gray-200'
               }`}
               style={{ height: 40 }}
@@ -1775,7 +1775,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                 <span>Filtros</span>
                 {filtrosActiveGroups > 0 && (
                   <span className={`inline-flex h-4 min-w-4 items-center justify-center rounded-full text-[10px] font-bold px-1 ${
-                    filtersOpen ? 'bg-white/20 text-white' : 'bg-[#D32F2F] text-white'
+                    filtersOpen ? 'bg-white/20 text-white' : 'bg-[#0D9488] text-white'
                   }`}>
                     {filtrosActiveGroups}
                   </span>
@@ -1811,7 +1811,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                   <button
                     type="button"
                     onClick={mode === 'gantt' ? clearGanttDataFilters : clearAllFilters}
-                    className="text-[12px] text-[#C62828] font-semibold hover:text-[#B71C1C] inline-flex items-center gap-1"
+                    className="text-[12px] text-[#0D9488] font-semibold hover:text-[#0F766E] inline-flex items-center gap-1"
                     title="Limpar todos os filtros"
                   >
                     <X size={12} />
@@ -1839,9 +1839,9 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
                           onClick={() => { if (!hasData) return; ganttToggle(ganttInline.setSummaryLineTypes)(key) }}
                           className={`flex-1 rounded-lg px-2 py-1.5 text-[11px] font-bold whitespace-nowrap text-center transition-colors border-[1.5px] ${
                             active && hasData
-                              ? 'bg-[#D32F2F] border-[#D32F2F] text-white'
+                              ? 'bg-[#0D9488] border-[#0D9488] text-white'
                               : hasData
-                                ? 'bg-[#FFF8F8] border-[#FECACA] text-[#F87171]'
+                                ? 'bg-[#F0FDFA] border-[#99F6E4] text-[#F87171]'
                                 : 'bg-gray-50 border-gray-200 text-gray-300 cursor-not-allowed opacity-60'
                           }`}
                         >
@@ -2074,7 +2074,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
               })}
               title={`Sair (${currentUser.email})`}
               className="flex items-center gap-1 px-2 py-1 rounded text-[10px] font-medium text-gray-600
-                hover:bg-red-50 hover:text-[#C62828] transition-colors border border-gray-300 hover:border-red-300"
+                hover:bg-red-50 hover:text-[#0D9488] transition-colors border border-gray-300 hover:border-red-300"
             >
               <LogOut size={12} />
               <span>Sair</span>
@@ -2086,14 +2086,14 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
 
         {/* Right: logo + status tab (status sits in the right padding, expands over logo on hover) */}
         <div className="relative flex items-center shrink-0 pl-1 pr-6">
-          <Image
-            src="/imagens/wab2.png"
-            alt="the app logo"
-            height={40}
-            width={120}
-            className="object-contain"
-            style={{ width: 'auto', height: 'auto' }}
-            priority
+          {/* Plain <img>: the optimizer refuses SVG without a global opt-in, and there is
+              nothing in four rectangles for it to optimize. */}
+          <img
+            src="/imagens/wordmark.svg"
+            alt="Taktline"
+            height={34}
+            className="object-contain text-gray-700"
+            style={{ height: 34, width: 'auto' }}
           />
 
           {/* Status tab — click to expand/collapse, positioned over logo */}
@@ -2164,7 +2164,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
           onClick={e => { if (e.target === e.currentTarget) setPendingImport(null) }}
         >
           <div className="bg-white rounded-lg shadow-2xl w-[380px] overflow-hidden">
-            <div className="bg-[#D32F2F] text-white px-4 py-2.5 flex items-center justify-between">
+            <div className="bg-[#0D9488] text-white px-4 py-2.5 flex items-center justify-between">
               <span className="font-semibold text-sm">Importar itens</span>
               <button
                 onClick={() => setPendingImport(null)}
@@ -2198,7 +2198,7 @@ export function AppHeader({ onGoHome, onSwitchApp, mode }: AppHeaderProps = {}) 
               </button>
               <button
                 onClick={handleImportAdditivo}
-                className="px-4 py-1.5 text-xs bg-[#D32F2F] text-white rounded hover:bg-red-800 transition-colors font-medium"
+                className="px-4 py-1.5 text-xs bg-[#0D9488] text-white rounded hover:bg-red-800 transition-colors font-medium"
               >
                 Adicionar
               </button>

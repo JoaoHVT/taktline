@@ -105,7 +105,7 @@ function HideMenu({
         onClick={() => setOpen(v => !v)}
         title="Opções de ocultar"
         className="flex h-7 items-center justify-center gap-0.5 rounded border px-1 transition-colors hover:bg-red-50"
-        style={{ borderColor: on ? RED : '#D1D5DB', color: on ? RED : '#6B7280', background: on ? '#FFF0F0' : undefined }}
+        style={{ borderColor: on ? RED : '#D1D5DB', color: on ? RED : '#6B7280', background: on ? '#F0FDFA' : undefined }}
       >
         {on ? <EyeOff size={14} /> : <Eye size={14} />}
         {/* Fixed-width slot: reserved whether or not a count shows, so the button keeps ONE
@@ -135,7 +135,7 @@ function HideMenu({
               style={{
                 display: 'flex', alignItems: 'center', gap: 8, width: '100%', textAlign: 'left',
                 padding: '4px 8px', border: 'none', borderRadius: 6, cursor: 'pointer',
-                background: r.checked ? '#FFF0F0' : 'transparent',
+                background: r.checked ? '#F0FDFA' : 'transparent',
               }}
               onMouseEnter={e => { if (!r.checked) e.currentTarget.style.background = '#F9FAFB' }}
               onMouseLeave={e => { if (!r.checked) e.currentTarget.style.background = 'transparent' }}
@@ -626,7 +626,7 @@ export function GanttModalFooter({
                   key={i}
                   onMouseDown={e => { e.preventDefault(); onLocoClick(r.taskName, r.linha, r.wo, r.startMs); setLocoSearchOpen(false); setLocoSearch(r.taskName) }}
                   style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', border: 'none', background: 'none', cursor: 'pointer', borderBottom: i < locoResults.length - 1 ? '1px solid #F3F4F6' : 'none' }}
-                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#FFF0F0' }}
+                  onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = '#F0FDFA' }}
                   onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'none' }}
                 >
                   <span style={{ fontSize: 11, fontWeight: 700, color: RED }}>{r.taskName}</span>
@@ -701,7 +701,7 @@ export function GanttModalFooter({
                 display: 'flex', alignItems: 'center', gap: 4,
                 height: 28, padding: '0 9px', borderRadius: 6,
                 border: `1px solid ${conflictCount > 0 ? RED : '#86EFAC'}`,
-                background: conflictCount > 0 ? (conflictListOpen ? '#FFE2E2' : '#FFF0F0') : '#F0FDF4',
+                background: conflictCount > 0 ? (conflictListOpen ? '#FFE2E2' : '#F0FDFA') : '#F0FDF4',
                 whiteSpace: 'nowrap', cursor: conflictCount > 0 ? 'pointer' : 'context-menu',
               }}
             >
@@ -729,7 +729,7 @@ export function GanttModalFooter({
                 minWidth: 300, maxWidth: 400, maxHeight: 320, overflowY: 'auto',
               }}>
                 <div style={{
-                  position: 'sticky', top: 0, background: '#FFF1F1', borderBottom: '1px solid #F2CACA',
+                  position: 'sticky', top: 0, background: '#FFF1F1', borderBottom: '1px solid #CCFBF1',
                   padding: '5px 9px', fontSize: 9.5, fontWeight: 800, color: '#B91C1C',
                   letterSpacing: '0.04em', textTransform: 'uppercase', whiteSpace: 'nowrap',
                 }}>
@@ -755,7 +755,7 @@ export function GanttModalFooter({
                           display: 'flex', alignItems: 'center', gap: 6, padding: '5px 9px',
                           borderTop: wi === 0 ? undefined : '1px dashed #F1F1F1',
                         }}
-                        onMouseEnter={e => { e.currentTarget.style.background = '#FFF5F5' }}
+                        onMouseEnter={e => { e.currentTarget.style.background = '#F0FDFA' }}
                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
                       >
                         <span style={{
@@ -807,7 +807,7 @@ export function GanttModalFooter({
                         key={key}
                         onClick={onClick}
                         title={title}
-                        style={{ height: '100%', padding: '0 9px', fontSize: 11, fontWeight: active ? 700 : 500, background: active ? '#FFF0F0' : '#fff', color: active ? RED : '#6B7280', border: 'none', borderLeft: i > 0 ? '1px solid #D1D5DB' : 'none', cursor: 'pointer', transition: 'background 0.1s, color 0.1s', whiteSpace: 'nowrap' }}
+                        style={{ height: '100%', padding: '0 9px', fontSize: 11, fontWeight: active ? 700 : 500, background: active ? '#F0FDFA' : '#fff', color: active ? RED : '#6B7280', border: 'none', borderLeft: i > 0 ? '1px solid #D1D5DB' : 'none', cursor: 'pointer', transition: 'background 0.1s, color 0.1s', whiteSpace: 'nowrap' }}
                       >
                         {label}
                       </button>
@@ -831,7 +831,7 @@ export function GanttModalFooter({
               onClick={() => setGanttGrabMode(v => !v)}
               title={ganttGrabMode ? 'Desativar arrastar' : 'Arrastar para mover a visualização (click e segure)'}
               className="flex h-7 w-7 items-center justify-center rounded border transition-colors hover:bg-red-50"
-              style={{ borderColor: ganttGrabMode ? RED : '#D1D5DB', color: ganttGrabMode ? RED : '#6B7280', background: ganttGrabMode ? '#FFF0F0' : undefined }}
+              style={{ borderColor: ganttGrabMode ? RED : '#D1D5DB', color: ganttGrabMode ? RED : '#6B7280', background: ganttGrabMode ? '#F0FDFA' : undefined }}
             >
               <Hand size={14} />
             </button>
@@ -947,7 +947,7 @@ export function GanttModalFooter({
               width: 30, height: 30, padding: 0,
               border: `1px solid ${switchHovered ? RED : '#D1D5DB'}`,
               borderRadius: 7,
-              background: switchHovered ? '#FFF0F0' : '#fff',
+              background: switchHovered ? '#F0FDFA' : '#fff',
               color: switchHovered ? RED : '#6B7280',
               cursor: 'pointer', flexShrink: 0,
               transition: 'border-color .15s, background .15s, color .15s',
@@ -973,7 +973,7 @@ export function GanttModalFooter({
               width: 30, height: 30, padding: 0,
               border: `1px solid ${mergeLocos || mergeHovered ? RED : '#D1D5DB'}`,
               borderRadius: 7,
-              background: mergeLocos || mergeHovered ? '#FFF0F0' : '#fff',
+              background: mergeLocos || mergeHovered ? '#F0FDFA' : '#fff',
               color: mergeLocos || mergeHovered ? RED : '#6B7280',
               cursor: 'pointer', flexShrink: 0,
               transition: 'border-color .15s, background .15s, color .15s',
@@ -997,7 +997,7 @@ export function GanttModalFooter({
               width: 30, height: 30, padding: 0,
               border: `1px solid ${showCompareArrows ? RED : arrowsHovered ? RED : '#D1D5DB'}`,
               borderRadius: 7,
-              background: showCompareArrows ? '#FFF0F0' : arrowsHovered ? '#FFF0F0' : '#fff',
+              background: showCompareArrows ? '#F0FDFA' : arrowsHovered ? '#F0FDFA' : '#fff',
               color: showCompareArrows ? RED : arrowsHovered ? RED : '#6B7280',
               cursor: 'pointer', flexShrink: 0,
               transition: 'border-color .15s, background .15s, color .15s',
@@ -1052,7 +1052,7 @@ export function GanttModalFooter({
           onClick={() => { if (!optLoading) onClose() }}
           disabled={optLoading}
           title={optLoading ? 'Otimização em andamento…' : undefined}
-          className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-white rounded font-medium transition-colors hover:bg-[#B71C1C] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center gap-1.5 px-4 py-1.5 text-xs text-white rounded font-medium transition-colors hover:bg-[#0F766E] disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ backgroundColor: RED }}
         >
           Fechar

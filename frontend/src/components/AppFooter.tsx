@@ -1,6 +1,6 @@
 /**
  * AppFooter — replicates the red KPI status bar from the original desktop tool MainWindow.
- * Background: WAB_RED (#D32F2F), white text, height ~56px.
+ * Background: WAB_RED (#0D9488), white text, height ~56px.
  *
  * Mode (Skill / Headcount) is driven by the header’s Headcount dropdown
  * via WorkspaceContext.headcountMode. No local toggle here.
@@ -88,7 +88,7 @@ export function AppFooter({ mode }: { mode?: 'analise' | 'gantt' }) {
     // `overflow-x-auto` + `shrink-0` groups: the KPI cards are fixed-width and non-wrapping, so
     // on a narrow viewport the flex row used to compress them until the values collided with
     // their neighbours. Scrolling the bar keeps every card readable at its designed size.
-    <footer className="bg-[#D32F2F] flex items-center px-4 shrink-0 relative overflow-x-auto" style={{ minHeight: 56 }}>
+    <footer className="bg-[#0D9488] flex items-center px-4 shrink-0 relative overflow-x-auto" style={{ minHeight: 56 }}>
       {/* Which app you are in. Absolutely centred rather than placed in the flex flow: the KPI
           groups on either side have different widths, so a flow-centred label would sit
           off-centre and drift as values change. Non-interactive, so it never eats a click

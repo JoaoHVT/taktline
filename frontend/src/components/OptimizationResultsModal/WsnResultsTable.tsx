@@ -155,7 +155,7 @@ export function WsnTable({
           const dispUtil    = isDisabled ? null : r.utilization_pct
           const utilColor =
             dispUtil == null ? '#9CA3AF'
-            : dispUtil > 100 ? '#C62828'
+            : dispUtil > 100 ? '#0D9488'
             : dispUtil > 85 ? '#E65100'
             : '#1B5E20'
           const allocForWsn    = allocations?.[r.wsn]
@@ -196,7 +196,7 @@ export function WsnTable({
               >
                 <td
                   className="px-3 py-2 font-semibold whitespace-nowrap select-none"
-                  style={{ color: isBottleneck && !isIgnored && !isDisabled ? '#C62828' : color, cursor: activeToolMode === 'restrict' ? undefined : (displayPeople.length > 0 ? 'pointer' : 'default') }}
+                  style={{ color: isBottleneck && !isIgnored && !isDisabled ? '#0D9488' : color, cursor: activeToolMode === 'restrict' ? undefined : (displayPeople.length > 0 ? 'pointer' : 'default') }}
                   onClick={handleRowPrimaryClick}
                   title={rowClickTitle}
                 >
@@ -248,7 +248,7 @@ export function WsnTable({
                     if (!si || si.turnos <= 0) return null
                     return (
                       <span className="ml-2 text-[9px] text-gray-400">
-                        <span className="font-semibold" style={{ color: '#C62828' }}>{si.turnos} turno{si.turnos !== 1 ? 's' : ''}</span>
+                        <span className="font-semibold" style={{ color: '#0D9488' }}>{si.turnos} turno{si.turnos !== 1 ? 's' : ''}</span>
                         {si.lm > 0 && <span> · máx {si.lm} pessoa{si.lm !== 1 ? 's' : ''}/turno</span>}
                         {si.lh > 0 && <span> · máx {si.lh.toFixed(1)} h/turno</span>}
                       </span>
@@ -259,7 +259,7 @@ export function WsnTable({
                   {dispDemand != null ? fmt1(dispDemand) : <span className="text-gray-400">—</span>}
                 </td>
                 {!isSkillMatrix && <td className="px-3 py-2 text-center tabular-nums font-semibold"
-                    style={{ color: dispAlloc == null ? '#9CA3AF' : isBottleneck && !isIgnored && !isDisabled ? '#C62828' : '#1B5E20' }}>
+                    style={{ color: dispAlloc == null ? '#9CA3AF' : isBottleneck && !isIgnored && !isDisabled ? '#0D9488' : '#1B5E20' }}>
                   {dispAlloc != null ? fmt1(dispAlloc) : <span className="text-gray-400">—</span>}
                 </td>}
                 {!isSkillMatrix && <td className="px-3 py-2 text-center tabular-nums"

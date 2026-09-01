@@ -174,7 +174,7 @@ function StatCell({ label, value, unit, sub, red = false, size = 14, borderColor
     <div style={{
       borderRadius: 9, padding: '7px 10px',
       border: `1.5px solid ${bColor}`,
-      background: red ? '#FFF0F0' : '#F9FAFB',
+      background: red ? '#F0FDFA' : '#F9FAFB',
       display: 'flex', flexDirection: 'column', gap: 1, minWidth: 0, justifyContent: 'center',
     }}>
       <div title={label} style={{ fontSize: 9, color: labelColor ?? '#9CA3AF', fontWeight: labelColor ? 400 : 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
@@ -924,7 +924,7 @@ export function ResumoGeralTab({
                   title={!loaded
                     ? `${lt.label} não faz parte desta carga — selecione-o na tela de abertura e carregue novamente.`
                     : !hasData ? `${lt.label} não foi carregado neste período` : undefined}
-                  style={{ flex: '1 1 auto', minWidth: 'max-content', textAlign: 'center', border: `2px solid ${active && usable ? RED : usable ? '#FECACA' : '#E5E7EB'}`, background: active && usable ? RED : usable ? '#FFF8F8' : '#F9FAFB', color: active && usable ? '#fff' : usable ? '#F87171' : '#D1D5DB', borderRadius: 9, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: usable ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', transition: 'all 0.15s', letterSpacing: '0.01em', opacity: usable ? 1 : 0.5 }}>
+                  style={{ flex: '1 1 auto', minWidth: 'max-content', textAlign: 'center', border: `2px solid ${active && usable ? RED : usable ? '#99F6E4' : '#E5E7EB'}`, background: active && usable ? RED : usable ? '#F0FDFA' : '#F9FAFB', color: active && usable ? '#fff' : usable ? '#F87171' : '#D1D5DB', borderRadius: 9, padding: '9px 18px', fontSize: 13, fontWeight: 700, cursor: usable ? 'pointer' : 'not-allowed', whiteSpace: 'nowrap', transition: 'all 0.15s', letterSpacing: '0.01em', opacity: usable ? 1 : 0.5 }}>
                   {lt.label}
                 </button>
               )
@@ -942,7 +942,7 @@ export function ResumoGeralTab({
               maxWidth 100%, fills the column and lets the cards wrap on narrow screens. The measured
               width still drives the Type buttons row above, so edges stay aligned. */}
           <div ref={kpiRowRef} style={{ display: 'flex', gap: 8, alignItems: 'stretch', alignSelf: 'flex-start', flexWrap: 'wrap', maxWidth: '100%' }}>
-            <div style={{ flex: '0 0 auto', minWidth: KPI_CARD_MIN_W, position: 'relative', borderRadius: 10, padding: '10px 16px', border: `1.5px solid ${RED}`, background: '#FFF0F0', display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <div style={{ flex: '0 0 auto', minWidth: KPI_CARD_MIN_W, position: 'relative', borderRadius: 10, padding: '10px 16px', border: `1.5px solid ${RED}`, background: '#F0FDFA', display: 'flex', flexDirection: 'column', gap: 2 }}>
               <div style={{ fontSize: 10, color: '#9CA3AF', fontWeight: 500, paddingRight: cardBadgeReserve(summaryTestData.totalHours, cmpTotalHours), whiteSpace: 'nowrap' }}>Horas Totais</div>
               <div style={{ fontSize: 22, fontWeight: 800, color: RED, lineHeight: 1.1, display: 'flex', alignItems: 'center' }}>
                 {showArrows && <CompareArrow current={summaryTestData.totalHours} compared={cmpTotalHours} size={16} variant="card" />}
@@ -1186,26 +1186,26 @@ export function ResumoGeralTab({
             <table className="resumo-cmp-table" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: tblW, minWidth: '100%' }}>
               <thead>
                 <tr style={{ background: '#FFF1F1' }}>
-                  <th style={{ width: col1W, minWidth: col1W, textAlign: 'left', padding: '10px 14px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #F2CACA', transition: 'width 0.2s' }}>Área</th>
-                  <th style={{ width: 82, minWidth: 82, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>Média</th>
+                  <th style={{ width: col1W, minWidth: col1W, textAlign: 'left', padding: '10px 14px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #CCFBF1', transition: 'width 0.2s' }}>Área</th>
+                  <th style={{ width: 82, minWidth: 82, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>Média</th>
                   {viewMode === 'mensal' ? (
                     viewYms.map((ym) => {
                       const monthNum = parseInt(ym.slice(5, 7))
                       return (
                         <Fragment key={`mh-${ym}`}>
-                          <th style={{ width: 62, minWidth: 62, textAlign: 'center', padding: '10px 6px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>{monthLabel(ym)}</th>
+                          <th style={{ width: 62, minWidth: 62, textAlign: 'center', padding: '10px 6px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>{monthLabel(ym)}</th>
                           {showQuarters && monthNum % 3 === 0 && (
-                            <th style={{ width: 56, minWidth: 56, textAlign: 'center', padding: '10px 2px', fontSize: 10, fontWeight: 800, color: RED, background: '#FFF5F5', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #FECACA' }}>Q{Math.ceil(monthNum / 3)}</th>
+                            <th style={{ width: 56, minWidth: 56, textAlign: 'center', padding: '10px 2px', fontSize: 10, fontWeight: 800, color: RED, background: '#F0FDFA', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #99F6E4' }}>Q{Math.ceil(monthNum / 3)}</th>
                           )}
                         </Fragment>
                       )
                     })
                   ) : (
                     viewFws.map(fw => (
-                      <th key={fw} style={{ width: 58, minWidth: 58, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>{fw}</th>
+                      <th key={fw} style={{ width: 58, minWidth: 58, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>{fw}</th>
                     ))
                   )}
-                  <th style={{ width: 88, minWidth: 88, textAlign: 'center', padding: '10px 4px', fontSize: 11, color: RED, borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>Total</th>
+                  <th style={{ width: 88, minWidth: 88, textAlign: 'center', padding: '10px 4px', fontSize: 11, color: RED, borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -1224,7 +1224,7 @@ export function ResumoGeralTab({
                             </div>
                           </div>
                         </td>
-                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                           {(() => { const activeM = viewMode === 'mensal' ? Object.values(area.hoursByYearMonth).filter(h => h > 0).length : Object.values(area.hoursByFw).filter(h => h > 0).length; const avg = activeM > 0 ? area.total / activeM : 0; return avg > 0 ? (<><div style={{ fontSize: 11, fontWeight: 700, color: '#4B5563' }}>{summaryMode === 'ue' ? formatSummaryValue(avg) : `${fmt(Math.round(avg))} h`}</div>{<div style={{ fontSize: 9, color: '#A3AAB7' }}>{summaryMode === 'ue' ? formatSummaryValue(areaAvgPerDay) : Math.round(areaAvgPerDay)} {perDayLabelLong}</div>}</>) : <div style={{ fontSize: 11, fontWeight: 700, color: '#CBD5E1' }}>—</div> })()}
                         </td>
                         {viewMode === 'mensal' ? (
@@ -1238,12 +1238,12 @@ export function ResumoGeralTab({
                             const qDays  = qKeys.reduce((s, key) => s + (summaryTestData.monthBusinessDays[key] ?? 0), 0)
                             return (
                               <Fragment key={`${area.area}-${ym}`}>
-                                <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                                <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                   <div style={{ fontSize: 11, fontWeight: 700, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpArea.get(area.area), ym)} size={9} />}{h > 0 ? (summaryMode === 'ue' ? formatSummaryValue(h) : `${formatSummaryValue(h)} h`) : '—'}</div>
                                   {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                                 </td>
                                 {showQuarters && isQEnd && (
-                                  <td style={{ textAlign: 'center', padding: '6px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #FECACA', background: '#FFF8F8' }}>
+                                  <td style={{ textAlign: 'center', padding: '6px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #99F6E4', background: '#F0FDFA' }}>
                                     <div style={{ fontSize: 11, fontWeight: 800, color: qTotal > 0 ? RED : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpArea.get(area.area), qKeys)} size={9} />}{qTotal > 0 ? (summaryMode === 'ue' ? formatSummaryValue(qTotal) : `${formatSummaryValue(qTotal)} h`) : '—'}</div>
                                     {qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}
                                   </td>
@@ -1256,14 +1256,14 @@ export function ResumoGeralTab({
                             const h = area.hoursByFw[fw] || 0
                             const days = summaryTestData.fwBusinessDays[fw] || 0
                             return (
-                              <td key={fw} style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                              <td key={fw} style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpArea.get(area.area), fw)} size={9} />}{h > 0 ? (summaryMode === 'ue' ? formatSummaryValue(h) : `${formatSummaryValue(h)} h`) : '—'}</div>
                                 {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                               </td>
                             )
                           })
                         )}
-                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', background: '#FFF8F8', borderLeft: '1px solid #F2CACA' }}>
+                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', background: '#F0FDFA', borderLeft: '1px solid #CCFBF1' }}>
                           <div style={{ fontSize: 12, fontWeight: 800, color: RED, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={area.total} compared={cmpTotal(cmpArea.get(area.area)?.total)} />}{formatTotalValue(area.total)}</div>
                         </td>
                       </tr>
@@ -1284,7 +1284,7 @@ export function ResumoGeralTab({
                                   </div>
                                 </div>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                 {(() => { const activeM = viewMode === 'mensal' ? Object.values(ws.hoursByYearMonth).filter(h => h > 0).length : Object.values(ws.hoursByFw).filter(h => h > 0).length; const avg = activeM > 0 ? ws.total / activeM : 0; return avg > 0 ? (<><div style={{ fontSize: 10, fontWeight: 600, color: '#4B5563' }}>{summaryMode === 'ue' ? formatSummaryValue(avg) : `${fmt(Math.round(avg))} h`}</div>{<div style={{ fontSize: 9, color: '#A3AAB7' }}>{summaryMode === 'ue' ? formatSummaryValue(wsAvgPerDay) : Math.round(wsAvgPerDay)} {perDayLabelLong}</div>}</>) : <div style={{ fontSize: 10, fontWeight: 600, color: '#CBD5E1' }}>—</div> })()}
                               </td>
                               {viewMode === 'mensal' ? (
@@ -1298,12 +1298,12 @@ export function ResumoGeralTab({
                                   const qDays  = qKeys.reduce((s, key) => s + (summaryTestData.monthBusinessDays[key] ?? 0), 0)
                                   return (
                                     <Fragment key={`${ws.key}-${ym}`}>
-                                      <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                                      <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                         <div style={{ fontSize: 11, fontWeight: 700, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpWs.get(`${area.area}||${ws.key}`), ym)} size={9} />}{h > 0 ? (summaryMode === 'ue' ? formatSummaryValue(h) : `${formatSummaryValue(h)} h`) : '—'}</div>
                                         {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                                       </td>
                                       {showQuarters && isQEnd && (
-                                        <td style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA', background: '#F4F6F8' }}>
+                                        <td style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1', background: '#F4F6F8' }}>
                                           <div style={{ fontSize: 10, fontWeight: 700, color: qTotal > 0 ? '#374151' : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpWs.get(`${area.area}||${ws.key}`), qKeys)} size={9} />}{qTotal > 0 ? (summaryMode === 'ue' ? formatSummaryValue(qTotal) : `${formatSummaryValue(qTotal)} h`) : '—'}</div>
                                           {qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}
                                         </td>
@@ -1316,14 +1316,14 @@ export function ResumoGeralTab({
                                   const h = ws.hoursByFw[fw] || 0
                                   const days = summaryTestData.fwBusinessDays[fw] || 0
                                   return (
-                                    <td key={fw} style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                                    <td key={fw} style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                       <div style={{ fontSize: 11, fontWeight: 700, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpWs.get(`${area.area}||${ws.key}`), fw)} size={9} />}{h > 0 ? (summaryMode === 'ue' ? formatSummaryValue(h) : `${formatSummaryValue(h)} h`) : '—'}</div>
                                       {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                                     </td>
                                   )
                                 })
                               )}
-                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', background: '#F4F6F8', borderLeft: '1px solid #F2CACA' }}>
+                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', background: '#F4F6F8', borderLeft: '1px solid #CCFBF1' }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={ws.total} compared={cmpTotal(cmpWs.get(`${area.area}||${ws.key}`)?.total)} size={11} />}{formatTotalValue(ws.total)}</div>
                               </td>
                             </tr>
@@ -1336,7 +1336,7 @@ export function ResumoGeralTab({
                                     <span style={{ fontSize: 10, color: '#6B7280' }}>{pn.desc || '—'}</span>
                                   </div>
                                 </td>
-                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA' }}>
+                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1' }}>
                                   {(() => { const activeM = viewMode === 'mensal' ? Object.values(pn.hoursByYearMonth).filter(h => h > 0).length : Object.values(pn.hoursByFw).filter(h => h > 0).length; const avg = activeM > 0 ? pn.total / activeM : 0; return avg > 0 ? <div style={{ fontSize: 10, fontWeight: 600, color: '#4B5563' }}>{summaryMode === 'ue' ? formatSummaryValue(avg) : `${fmt(Math.round(avg))} h`}</div> : <div style={{ fontSize: 10, color: '#CBD5E1' }}>—</div> })()}
                                 </td>
                                 {viewMode === 'mensal' ? (
@@ -1346,10 +1346,10 @@ export function ResumoGeralTab({
                                     const isQEnd = monthNum % 3 === 0
                                     return (
                                       <Fragment key={`${ws.key}-pn${pnIdx}-${ym}`}>
-                                        <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA' }}>
+                                        <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1' }}>
                                           <div style={{ fontSize: 10, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpPn.get(`${area.area}||${ws.key}||${pn.pn}||${pn.desc}`), ym)} size={9} />}{h > 0 ? `${formatSummaryValue(h)} h` : '—'}</div>
                                         </td>
-                                        {showQuarters && isQEnd && <td style={{ borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA', background: '#EEF2FF' }} />}
+                                        {showQuarters && isQEnd && <td style={{ borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1', background: '#EEF2FF' }} />}
                                       </Fragment>
                                     )
                                   })
@@ -1357,13 +1357,13 @@ export function ResumoGeralTab({
                                   viewFws.map(fw => {
                                     const h = pn.hoursByFw[fw] || 0
                                     return (
-                                      <td key={fw} style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA' }}>
+                                      <td key={fw} style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1' }}>
                                         <div style={{ fontSize: 10, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpPn.get(`${area.area}||${ws.key}||${pn.pn}||${pn.desc}`), fw)} size={9} />}{h > 0 ? `${formatSummaryValue(h)} h` : '—'}</div>
                                       </td>
                                     )
                                   })
                                 )}
-                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', background: '#EEF2FF', borderLeft: '1px solid #F2CACA' }}>
+                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', background: '#EEF2FF', borderLeft: '1px solid #CCFBF1' }}>
                                   <div style={{ fontSize: 10, fontWeight: 600, color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={pn.total} compared={cmpTotal(cmpPn.get(`${area.area}||${ws.key}||${pn.pn}||${pn.desc}`)?.total)} size={10} />}{formatTotalValue(pn.total)}</div>
                                 </td>
                               </tr>
@@ -1376,9 +1376,9 @@ export function ResumoGeralTab({
                 })}
 
                 {/* Total row */}
-                <tr style={{ background: '#FFECEC' }}>
-                  <td style={{ padding: '12px 14px', fontWeight: 800, color: RED, fontSize: 12, borderTop: '1px solid #F2CACA' }}>TOTAL</td>
-                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>
+                <tr style={{ background: '#CCFBF1' }}>
+                  <td style={{ padding: '12px 14px', fontWeight: 800, color: RED, fontSize: 12, borderTop: '1px solid #CCFBF1' }}>TOTAL</td>
+                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>
                     {(() => {
                       const activeM = viewMode === 'mensal' ? Object.values(summaryTestData.totalsByYearMonth).filter(h => h > 0).length : viewFws.length
                       const avg = activeM > 0 ? summaryTestData.totalHours / activeM : 0
@@ -1396,11 +1396,11 @@ export function ResumoGeralTab({
                       const qDays  = qKeys.reduce((s, key) => s + (summaryTestData.monthBusinessDays[key] ?? 0), 0)
                       return (
                         <Fragment key={`total-${ym}`}>
-                          <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA', boxShadow: limitLineShadow(ym) }}>
+                          <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1', boxShadow: limitLineShadow(ym) }}>
                             <div style={{ fontSize: 11, fontWeight: 800, color: RED }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpGrand, ym)} size={9} />}{h > 0 ? (summaryMode === 'ue' ? formatSummaryValue(h) : `${formatSummaryValue(h)} h`) : '—'}</div>
                             {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                           </td>
-                          {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '6px 2px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #FECACA', background: '#FFECEC' }}><div style={{ fontSize: 11, fontWeight: 900, color: qTotal > 0 ? RED : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpGrand, qKeys)} size={9} />}{qTotal > 0 ? (summaryMode === 'ue' ? formatSummaryValue(qTotal) : `${formatSummaryValue(qTotal)} h`) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
+                          {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '6px 2px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #99F6E4', background: '#CCFBF1' }}><div style={{ fontSize: 11, fontWeight: 900, color: qTotal > 0 ? RED : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpGrand, qKeys)} size={9} />}{qTotal > 0 ? (summaryMode === 'ue' ? formatSummaryValue(qTotal) : `${formatSummaryValue(qTotal)} h`) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
                         </Fragment>
                       )
                     })
@@ -1409,14 +1409,14 @@ export function ResumoGeralTab({
                       const h = summaryTestData.areas.reduce((s, a) => s + (a.hoursByFw[fw] || 0), 0)
                       const days = summaryTestData.fwBusinessDays[fw] || 0
                       return (
-                        <td key={fw} style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA', boxShadow: limitLineShadow(fw) }}>
+                        <td key={fw} style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1', boxShadow: limitLineShadow(fw) }}>
                           <div style={{ fontSize: 11, fontWeight: 800, color: RED }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpGrand, fw)} size={9} />}{h > 0 ? (summaryMode === 'ue' ? formatSummaryValue(h) : `${formatSummaryValue(h)} h`) : '—'}</div>
                           {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                         </td>
                       )
                     })
                   )}
-                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', background: '#F9DCDC', borderLeft: '1px solid #F2CACA' }}>
+                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', background: '#F9DCDC', borderLeft: '1px solid #CCFBF1' }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: RED, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={summaryTestData.totalHours} compared={cmpTotal(cmpGrand?.total)} />}{formatTotalValue(summaryTestData.totalHours)}</div>
                   </td>
                 </tr>
@@ -1486,26 +1486,26 @@ export function ResumoGeralTab({
             <table className="resumo-cmp-table" style={{ borderCollapse: 'separate', borderSpacing: 0, tableLayout: 'fixed', width: tblW, minWidth: '100%' }}>
               <thead>
                 <tr style={{ background: '#FFF1F1' }}>
-                  <th style={{ width: col1W, minWidth: col1W, textAlign: 'left', padding: '10px 14px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #F2CACA', transition: 'width 0.2s' }}>Tipo / Modelo / Loco</th>
-                  <th style={{ width: 82, minWidth: 82, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>Média</th>
+                  <th style={{ width: col1W, minWidth: col1W, textAlign: 'left', padding: '10px 14px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #CCFBF1', transition: 'width 0.2s' }}>Tipo / Modelo / Loco</th>
+                  <th style={{ width: 82, minWidth: 82, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>Média</th>
                   {viewMode === 'mensal' ? (
                     viewYms.map((ym) => {
                       const monthNum = parseInt(ym.slice(5, 7))
                       return (
                         <Fragment key={`lh-${ym}`}>
-                          <th style={{ width: 62, minWidth: 62, textAlign: 'center', padding: '10px 6px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>{monthLabel(ym)}</th>
+                          <th style={{ width: 62, minWidth: 62, textAlign: 'center', padding: '10px 6px', fontSize: 11, color: '#6B7280', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>{monthLabel(ym)}</th>
                           {showQuarters && monthNum % 3 === 0 && (
-                            <th style={{ width: 56, minWidth: 56, textAlign: 'center', padding: '10px 2px', fontSize: 10, fontWeight: 800, color: RED, background: '#FFF5F5', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #FECACA' }}>Q{Math.ceil(monthNum / 3)}</th>
+                            <th style={{ width: 56, minWidth: 56, textAlign: 'center', padding: '10px 2px', fontSize: 10, fontWeight: 800, color: RED, background: '#F0FDFA', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #99F6E4' }}>Q{Math.ceil(monthNum / 3)}</th>
                           )}
                         </Fragment>
                       )
                     })
                   ) : (
                     viewFws.map(fw => (
-                      <th key={fw} style={{ width: 58, minWidth: 58, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>{fw}</th>
+                      <th key={fw} style={{ width: 58, minWidth: 58, textAlign: 'center', padding: '10px 4px', fontSize: 10, color: '#6B7280', borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>{fw}</th>
                     ))
                   )}
-                  <th style={{ width: 88, minWidth: 88, textAlign: 'center', padding: '10px 4px', fontSize: 11, color: RED, borderBottom: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>Total</th>
+                  <th style={{ width: 88, minWidth: 88, textAlign: 'center', padding: '10px 4px', fontSize: 11, color: RED, borderBottom: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>Total</th>
                 </tr>
               </thead>
               <tbody>
@@ -1526,7 +1526,7 @@ export function ResumoGeralTab({
                             </div>
                           </div>
                         </td>
-                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                           {tipoAvg > 0 ? (<><div style={{ fontSize: 11, fontWeight: 700, color: '#4B5563' }}>{fmtMain(tipoAvg)}</div>{<div style={{ fontSize: 9, color: '#A3AAB7' }}>{summaryMode === 'ue' ? formatSummaryValue(tipoAvgDay) : Math.round(tipoAvgDay)} {perDayLabelLong}</div>}</>) : <div style={{ fontSize: 11, fontWeight: 700, color: '#CBD5E1' }}>—</div>}
                         </td>
                         {viewMode === 'mensal' ? viewYms.map(ym => {
@@ -1539,19 +1539,19 @@ export function ResumoGeralTab({
                           const qDays  = qKeys.reduce((s2, key) => s2 + (summaryTestData.monthBusinessDays[key] ?? 0), 0)
                           return (
                             <Fragment key={`${tipo.tipo}-${ym}`}>
-                              <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                              <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: cellColor(h) }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpTipo.get(tipo.tipo), ym)} size={9} />}{cellVal(h)}</div>
                                 {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                               </td>
-                              {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '6px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #FECACA', background: '#FFF8F8' }}><div style={{ fontSize: 11, fontWeight: 800, color: qTotal > 0 ? RED : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpTipo.get(tipo.tipo), qKeys)} size={9} />}{qTotal > 0 ? cellVal(qTotal) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
+                              {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '6px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #99F6E4', background: '#F0FDFA' }}><div style={{ fontSize: 11, fontWeight: 800, color: qTotal > 0 ? RED : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpTipo.get(tipo.tipo), qKeys)} size={9} />}{qTotal > 0 ? cellVal(qTotal) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
                             </Fragment>
                           )
                         }) : viewFws.map(fw => {
                           const h = tipo.hoursByFw[fw] || 0
                           const days = summaryTestData.fwBusinessDays[fw] || 0
-                          return <td key={fw} style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}><div style={{ fontSize: 11, fontWeight: 700, color: cellColor(h) }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpTipo.get(tipo.tipo), fw)} size={9} />}{cellVal(h)}</div>{h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}</td>
+                          return <td key={fw} style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}><div style={{ fontSize: 11, fontWeight: 700, color: cellColor(h) }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpTipo.get(tipo.tipo), fw)} size={9} />}{cellVal(h)}</div>{h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}</td>
                         })}
-                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', background: '#FFF8F8', borderLeft: '1px solid #F2CACA' }}>
+                        <td style={{ textAlign: 'center', padding: '6px 4px', borderBottom: '1px solid #EEF2F7', background: '#F0FDFA', borderLeft: '1px solid #CCFBF1' }}>
                           <div style={{ fontSize: 12, fontWeight: 800, color: RED, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={tipo.total} compared={cmpTotal(cmpTipo.get(tipo.tipo)?.total)} />}{formatTotalValue(tipo.total)}</div>
                         </td>
                       </tr>
@@ -1574,7 +1574,7 @@ export function ResumoGeralTab({
                                   </div>
                                 </div>
                               </td>
-                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                 {modelAvg > 0 ? (<><div style={{ fontSize: 10, fontWeight: 600, color: '#4B5563' }}>{fmtMain(modelAvg)}</div>{<div style={{ fontSize: 9, color: '#A3AAB7' }}>{summaryMode === 'ue' ? formatSummaryValue(modelAvgDay) : Math.round(modelAvgDay)} {perDayLabelLong}</div>}</>) : <div style={{ fontSize: 10, fontWeight: 600, color: '#CBD5E1' }}>—</div>}
                               </td>
                               {viewMode === 'mensal' ? viewYms.map(ym => {
@@ -1587,19 +1587,19 @@ export function ResumoGeralTab({
                                 const qDays  = qKeys.reduce((s2, key) => s2 + (summaryTestData.monthBusinessDays[key] ?? 0), 0)
                                 return (
                                   <Fragment key={`${modelKey}-${ym}`}>
-                                    <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}>
+                                    <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}>
                                       <div style={{ fontSize: 11, fontWeight: 700, color: cellColor(h) }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpModel.get(mg.model), ym)} size={9} />}{cellVal(h)}</div>
                                       {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                                     </td>
-                                    {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA', background: '#F4F6F8' }}><div style={{ fontSize: 10, fontWeight: 700, color: qTotal > 0 ? '#374151' : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpModel.get(mg.model), qKeys)} size={9} />}{qTotal > 0 ? cellVal(qTotal) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
+                                    {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '4px 2px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1', background: '#F4F6F8' }}><div style={{ fontSize: 10, fontWeight: 700, color: qTotal > 0 ? '#374151' : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpModel.get(mg.model), qKeys)} size={9} />}{qTotal > 0 ? cellVal(qTotal) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
                                   </Fragment>
                                 )
                               }) : viewFws.map(fw => {
                                 const h = mg.hoursByFw[fw] || 0
                                 const days = summaryTestData.fwBusinessDays[fw] || 0
-                                return <td key={fw} style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #F2CACA' }}><div style={{ fontSize: 11, fontWeight: 700, color: cellColor(h) }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpModel.get(mg.model), fw)} size={9} />}{cellVal(h)}</div>{h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}</td>
+                                return <td key={fw} style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', borderLeft: '1px solid #CCFBF1' }}><div style={{ fontSize: 11, fontWeight: 700, color: cellColor(h) }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpModel.get(mg.model), fw)} size={9} />}{cellVal(h)}</div>{h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#A3AAB7' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}</td>
                               })}
-                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', background: '#F4F6F8', borderLeft: '1px solid #F2CACA' }}>
+                              <td style={{ textAlign: 'center', padding: '5px 4px', borderBottom: '1px solid #EEF2F7', background: '#F4F6F8', borderLeft: '1px solid #CCFBF1' }}>
                                 <div style={{ fontSize: 11, fontWeight: 700, color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={mg.totalHours} compared={cmpTotal(cmpModel.get(mg.model)?.totalHours)} size={11} />}{formatTotalValue(mg.totalHours)}</div>
                               </td>
                             </tr>
@@ -1614,13 +1614,13 @@ export function ResumoGeralTab({
                                     {(() => {
                                       const dl = displayedLoco(mg.model, lr.loco, lr.linha, lr.startMs, lr.takt)
                                       return (<>
-                                        {dl.takt != null && <span style={{ fontSize: 9, fontWeight: 700, color: dl.edited ? '#1D4ED8' : RED, background: dl.edited ? '#E0EAFF' : '#FFF0F0', border: `1px solid ${dl.edited ? '#1D4ED8' : RED}`, borderRadius: 4, padding: '1px 5px' }} title={dl.edited ? 'Editado' : undefined}>T{dl.takt}</span>}
+                                        {dl.takt != null && <span style={{ fontSize: 9, fontWeight: 700, color: dl.edited ? '#1D4ED8' : RED, background: dl.edited ? '#E0EAFF' : '#F0FDFA', border: `1px solid ${dl.edited ? '#1D4ED8' : RED}`, borderRadius: 4, padding: '1px 5px' }} title={dl.edited ? 'Editado' : undefined}>T{dl.takt}</span>}
                                         {dl.startMs != null && dl.startMs.length >= 10 && <span style={{ fontSize: 9, color: dl.edited ? '#1D4ED8' : '#6B7280', fontWeight: dl.edited ? 700 : 400 }}>{dl.startMs.slice(8,10)}/{dl.startMs.slice(5,7)}/{dl.startMs.slice(0,4)}</span>}
                                       </>)
                                     })()}
                                   </div>
                                 </td>
-                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA' }}>
+                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1' }}>
                                   {(() => { const activeM = viewMode === 'mensal' ? Object.values(lr.hoursByYearMonth).filter(h => h > 0).length : Object.values(lr.hoursByFw).filter(h => h > 0).length; const avg = activeM > 0 ? lr.hours / activeM : 0; return avg > 0 ? <div style={{ fontSize: 10, fontWeight: 600, color: '#4B5563' }}>{fmtMain(avg)}</div> : <div style={{ fontSize: 10, color: '#CBD5E1' }}>—</div> })()}
                                 </td>
                                 {viewMode === 'mensal' ? viewYms.map(ym => {
@@ -1629,17 +1629,17 @@ export function ResumoGeralTab({
                                   const isQEnd = monthNum % 3 === 0
                                   return (
                                     <Fragment key={`${modelKey}-loco${locoIdx}-${ym}`}>
-                                      <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA' }}>
+                                      <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1' }}>
                                         <div style={{ fontSize: 10, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpLoco.get(`${mg.model}||${lr.loco}||${String(lr.startMs ?? '')}`), ym)} size={9} />}{h > 0 ? cellVal(h) : '—'}</div>
                                       </td>
-                                      {showQuarters && isQEnd && <td style={{ borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA', background: '#EEF2FF' }} />}
+                                      {showQuarters && isQEnd && <td style={{ borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1', background: '#EEF2FF' }} />}
                                     </Fragment>
                                   )
                                 }) : viewFws.map(fw => {
                                   const h = lr.hoursByFw[fw] || 0
-                                  return <td key={fw} style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #F2CACA' }}><div style={{ fontSize: 10, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpLoco.get(`${mg.model}||${lr.loco}||${String(lr.startMs ?? '')}`), fw)} size={9} />}{h > 0 ? cellVal(h) : '—'}</div></td>
+                                  return <td key={fw} style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', borderLeft: '1px solid #CCFBF1' }}><div style={{ fontSize: 10, color: h > 0 ? '#4B5563' : '#CBD5E1' }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpLoco.get(`${mg.model}||${lr.loco}||${String(lr.startMs ?? '')}`), fw)} size={9} />}{h > 0 ? cellVal(h) : '—'}</div></td>
                                 })}
-                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', background: '#EEF2FF', borderLeft: '1px solid #F2CACA' }}>
+                                <td style={{ textAlign: 'center', padding: '4px 4px', borderBottom: '1px solid #E8ECF5', background: '#EEF2FF', borderLeft: '1px solid #CCFBF1' }}>
                                   <div style={{ fontSize: 10, fontWeight: 600, color: '#1D4ED8', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={lr.hours} compared={cmpTotal(cmpLoco.get(`${mg.model}||${lr.loco}||${String(lr.startMs ?? '')}`)?.hours)} size={10} />}{formatTotalValue(lr.hours)}</div>
                                 </td>
                               </tr>
@@ -1652,9 +1652,9 @@ export function ResumoGeralTab({
                 })}
 
                 {/* Locos total row */}
-                <tr style={{ background: '#FFECEC' }}>
-                  <td style={{ padding: '12px 14px', fontWeight: 800, color: RED, fontSize: 12, borderTop: '1px solid #F2CACA' }}>TOTAL</td>
-                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA' }}>
+                <tr style={{ background: '#CCFBF1' }}>
+                  <td style={{ padding: '12px 14px', fontWeight: 800, color: RED, fontSize: 12, borderTop: '1px solid #CCFBF1' }}>TOTAL</td>
+                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1' }}>
                     {(() => {
                       const activeM = viewMode === 'mensal' ? Object.values(locosGrandByYm).filter(h => h > 0).length : Object.values(locosGrandByFw).filter(h => h > 0).length
                       const avg = activeM > 0 ? locosGrandTotal / activeM : 0
@@ -1672,19 +1672,19 @@ export function ResumoGeralTab({
                     const qDays  = qKeys.reduce((s2, key) => s2 + (summaryTestData.monthBusinessDays[key] ?? 0), 0)
                     return (
                       <Fragment key={`ltotal-${ym}`}>
-                        <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA', boxShadow: limitLineShadow(ym) }}>
+                        <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1', boxShadow: limitLineShadow(ym) }}>
                           <div style={{ fontSize: 11, fontWeight: 800, color: RED }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpLocosGrand, ym)} size={9} />}{h > 0 ? cellVal(h) : '—'}</div>
                           {h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}
                         </td>
-                        {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '6px 2px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #FECACA', background: '#FFECEC' }}><div style={{ fontSize: 11, fontWeight: 900, color: qTotal > 0 ? RED : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpLocosGrand, qKeys)} size={9} />}{qTotal > 0 ? cellVal(qTotal) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
+                        {showQuarters && isQEnd && <td style={{ textAlign: 'center', padding: '6px 2px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #99F6E4', background: '#CCFBF1' }}><div style={{ fontSize: 11, fontWeight: 900, color: qTotal > 0 ? RED : '#CBD5E1' }}>{showArrows && <CompareArrow current={qTotal} compared={cmpQuarter(cmpLocosGrand, qKeys)} size={9} />}{qTotal > 0 ? cellVal(qTotal) : '—'}</div>{qTotal > 0 && qDays > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(qTotal / qDays)} {perDayLabel}</div>}</td>}
                       </Fragment>
                     )
                   }) : viewFws.map(fw => {
                     const h = locosGrandByFw[fw] || 0
                     const days = summaryTestData.fwBusinessDays[fw] || 0
-                    return <td key={fw} style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', borderLeft: '1px solid #F2CACA', boxShadow: limitLineShadow(fw) }}><div style={{ fontSize: 11, fontWeight: 800, color: RED }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpLocosGrand, fw)} size={9} />}{h > 0 ? cellVal(h) : '—'}</div>{h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}</td>
+                    return <td key={fw} style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', borderLeft: '1px solid #CCFBF1', boxShadow: limitLineShadow(fw) }}><div style={{ fontSize: 11, fontWeight: 800, color: RED }}>{showArrows && <CompareArrow current={h} compared={cmpPeriod(cmpLocosGrand, fw)} size={9} />}{h > 0 ? cellVal(h) : '—'}</div>{h > 0 && days > 0 && <div style={{ fontSize: 9, color: '#9CA3AF' }}>{formatSummaryValue(h / days)} {perDayLabel}</div>}</td>
                   })}
-                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #F2CACA', background: '#F9DCDC', borderLeft: '1px solid #F2CACA' }}>
+                  <td style={{ textAlign: 'center', padding: '8px 4px', borderTop: '1px solid #CCFBF1', background: '#F9DCDC', borderLeft: '1px solid #CCFBF1' }}>
                     <div style={{ fontSize: 13, fontWeight: 900, color: RED, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{showArrows && <CompareArrow current={locosGrandTotal} compared={cmpTotal(cmpLocosGrand?.total)} />}{formatTotalValue(locosGrandTotal)}</div>
                   </td>
                 </tr>
@@ -1738,7 +1738,7 @@ export function ResumoGeralTab({
                       <div key={mg.model} style={{ flex: '1 1 160px', minWidth: 0, maxWidth: 220, display: 'flex', flexDirection: 'column' }}>
                         <div
                           onClick={() => setExpandedModels(prev => { const n = new Set(prev); if (n.has(cardKey)) n.delete(cardKey); else n.add(cardKey); return n })}
-                          style={{ borderRadius: isOpen ? '10px 10px 0 0' : 10, border: `1.5px solid ${isOpen ? RED : '#FECACA'}`, background: isOpen ? '#FFF0F0' : '#FFF8F8', padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
+                          style={{ borderRadius: isOpen ? '10px 10px 0 0' : 10, border: `1.5px solid ${isOpen ? RED : '#99F6E4'}`, background: isOpen ? '#F0FDFA' : '#F0FDFA', padding: '12px 14px', cursor: 'pointer', userSelect: 'none' }}
                         >
                           {/* Row 1: model name — ALWAYS a single line, ellipsized when too long (the
                               full name stays available via the title tooltip). Never wraps, so every
@@ -1791,7 +1791,7 @@ export function ResumoGeralTab({
                                       <EyeOff size={10} style={{ color: '#9CA3AF', flexShrink: 0 }} aria-label="Oculta no Schedule" />
                                     )}
                                     <span style={{ fontSize: 11, fontWeight: 600, color: '#1E293B', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>{lr.loco}</span>
-                                    {(() => { const dl = displayedLoco(mg.model, lr.loco, lr.linha, lr.startMs, lr.takt, lr.finishMS); return dl.takt != null ? <span style={{ fontSize: 9, fontWeight: 700, color: dl.edited ? '#1D4ED8' : RED, background: dl.edited ? '#E0EAFF' : '#FFF0F0', border: `1px solid ${dl.edited ? '#1D4ED8' : RED}`, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap', flexShrink: 0 }} title={dl.edited ? 'Editado' : undefined}>T{dl.takt}</span> : null })()}
+                                    {(() => { const dl = displayedLoco(mg.model, lr.loco, lr.linha, lr.startMs, lr.takt, lr.finishMS); return dl.takt != null ? <span style={{ fontSize: 9, fontWeight: 700, color: dl.edited ? '#1D4ED8' : RED, background: dl.edited ? '#E0EAFF' : '#F0FDFA', border: `1px solid ${dl.edited ? '#1D4ED8' : RED}`, borderRadius: 4, padding: '1px 5px', whiteSpace: 'nowrap', flexShrink: 0 }} title={dl.edited ? 'Editado' : undefined}>T{dl.takt}</span> : null })()}
                                     <span style={{ fontSize: 11, fontWeight: 700, color: '#fff', background: RED, borderRadius: 5, padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>{fmt(Math.round(lr.hours))} h</span>
                                   </div>
                                   {(() => {

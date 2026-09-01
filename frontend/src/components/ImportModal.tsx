@@ -609,7 +609,7 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
       >
 
         {/* Title bar */}
-        <div className="bg-[#D32F2F] text-white flex items-center justify-between px-4 py-2.5 shrink-0">
+        <div className="bg-[#0D9488] text-white flex items-center justify-between px-4 py-2.5 shrink-0">
           <div className="flex items-center gap-2">
             <Play size={13} fill="white" className="shrink-0" />
             <span className="font-semibold text-sm tracking-wide">{isFactoryLoad ? 'Simular carga de fábrica' : 'Simular plano'}</span>
@@ -653,14 +653,14 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
               onClick={() => handleModeChange('anual')}
               className={`rounded-xl border-2 px-3 pt-2.5 pb-3 transition-all cursor-pointer select-none ${
                 mode === 'anual'
-                  ? 'border-[#D32F2F] bg-red-50 shadow-sm'
+                  ? 'border-[#0D9488] bg-red-50 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/80'
               }`}
             >
               <div className="flex items-center gap-1.5 mb-0.5">
-                <Calendar size={14} className={mode === 'anual' ? 'text-[#D32F2F]' : 'text-gray-400'} />
-                <span className={`font-bold text-xs tracking-widest ${mode === 'anual' ? 'text-[#D32F2F]' : 'text-gray-400'}`}>ANUAL</span>
-                {mode === 'anual' && <div className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] ml-auto shrink-0" />}
+                <Calendar size={14} className={mode === 'anual' ? 'text-[#0D9488]' : 'text-gray-400'} />
+                <span className={`font-bold text-xs tracking-widest ${mode === 'anual' ? 'text-[#0D9488]' : 'text-gray-400'}`}>ANUAL</span>
+                {mode === 'anual' && <div className="w-1.5 h-1.5 rounded-full bg-[#0D9488] ml-auto shrink-0" />}
               </div>
               <p className={`text-[10px] mb-2 ${mode === 'anual' ? 'text-red-400' : 'text-gray-400'}`}>Por ano fiscal</p>
               <div className="relative" onClick={e => e.stopPropagation()}>
@@ -688,14 +688,14 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
               onClick={() => handleModeChange('mensal')}
               className={`rounded-xl border-2 px-3 pt-2.5 pb-3 transition-all cursor-pointer select-none ${
                 mode === 'mensal'
-                  ? 'border-[#D32F2F] bg-red-50 shadow-sm'
+                  ? 'border-[#0D9488] bg-red-50 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/80'
               }`}
             >
               <div className="flex items-center gap-1.5 mb-0.5">
-                <CalendarDays size={14} className={mode === 'mensal' ? 'text-[#D32F2F]' : 'text-gray-400'} />
-                <span className={`font-bold text-xs tracking-widest ${mode === 'mensal' ? 'text-[#D32F2F]' : 'text-gray-400'}`}>MENSAL</span>
-                {mode === 'mensal' && <div className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] ml-auto shrink-0" />}
+                <CalendarDays size={14} className={mode === 'mensal' ? 'text-[#0D9488]' : 'text-gray-400'} />
+                <span className={`font-bold text-xs tracking-widest ${mode === 'mensal' ? 'text-[#0D9488]' : 'text-gray-400'}`}>MENSAL</span>
+                {mode === 'mensal' && <div className="w-1.5 h-1.5 rounded-full bg-[#0D9488] ml-auto shrink-0" />}
               </div>
               <p className={`text-[10px] mb-2 ${mode === 'mensal' ? 'text-red-400' : 'text-gray-400'}`}>Por mês do plano</p>
               <div className="relative" onClick={e => e.stopPropagation()}>
@@ -729,14 +729,14 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
               onClick={() => handleModeChange('semanal')}
               className={`rounded-xl border-2 px-3 pt-2.5 pb-3 transition-all cursor-pointer select-none ${
                 mode === 'semanal'
-                  ? 'border-[#D32F2F] bg-red-50 shadow-sm'
+                  ? 'border-[#0D9488] bg-red-50 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/80'
               }`}
             >
               <div className="flex items-center gap-1.5 mb-0.5">
-                <CalendarRange size={14} className={mode === 'semanal' ? 'text-[#D32F2F]' : 'text-gray-400'} />
-                <span className={`font-bold text-xs tracking-widest ${mode === 'semanal' ? 'text-[#D32F2F]' : 'text-gray-400'}`}>SEMANAL</span>
-                {mode === 'semanal' && <div className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] ml-auto shrink-0" />}
+                <CalendarRange size={14} className={mode === 'semanal' ? 'text-[#0D9488]' : 'text-gray-400'} />
+                <span className={`font-bold text-xs tracking-widest ${mode === 'semanal' ? 'text-[#0D9488]' : 'text-gray-400'}`}>SEMANAL</span>
+                {mode === 'semanal' && <div className="w-1.5 h-1.5 rounded-full bg-[#0D9488] ml-auto shrink-0" />}
               </div>
               <p className={`text-[10px] mb-2 ${mode === 'semanal' ? 'text-red-400' : 'text-gray-400'}`}>Por semana fiscal</p>
               <div className="relative" onClick={e => e.stopPropagation()}>
@@ -906,7 +906,7 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
           ) : loading && items.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-40 gap-3 px-10">
               <div className="flex items-center gap-2">
-                <img src="/imagens/wab1.png" alt="" width={20} height={20} className="animate-spin" />
+                <img src="/imagens/mark.svg" alt="" width={20} height={20} className="animate-spin" />
                 <p className="text-sm text-gray-500">Carregando itens...</p>
               </div>
               <ProgressBar indeterminate className="w-full max-w-xs" />
@@ -934,7 +934,7 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
                       title={allChecked ? 'Desmarcar todos' : 'Selecionar todos'}
                       className={`flex flex-col items-center justify-center gap-0.5 w-10 h-10 rounded-xl mx-auto transition-all border-2 ${
                         allChecked
-                          ? 'bg-[#D32F2F] border-[#D32F2F] text-white shadow-md'
+                          ? 'bg-[#0D9488] border-[#0D9488] text-white shadow-md'
                           : someChecked
                             ? 'bg-red-50 border-red-400 text-red-500'
                             : filtered.length > 0
@@ -1038,7 +1038,7 @@ export function ImportModal({ onImport, onClose, source = 'planoMensal', sourceL
             <button
               onClick={handleImport}
               disabled={selected.size === 0}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#D32F2F] text-white rounded-lg hover:bg-red-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0D9488] text-white rounded-lg hover:bg-red-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
             >
               <Play size={12} fill="white" className="shrink-0" />
               Simular {selected.size > 0 ? `(${selected.size} itens)` : ''}

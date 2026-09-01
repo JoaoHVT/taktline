@@ -1,8 +1,8 @@
 /* eslint-disable no-restricted-globals */
 
-const RED = '#D32F2F'
-const RED_DK = '#B71C1C'
-const RED_LT = '#FFEBEE'
+const RED = '#0D9488'
+const RED_DK = '#0F766E'
+const RED_LT = '#F0FDFA'
 // Allowed-overlap border (orange): a shared target-WS cell that is a valid boundary
 // handoff under the "Permitir regras de sobreposição" rule — not a true conflict.
 const ORANGE = '#F57C00'
@@ -1550,7 +1550,7 @@ function _fmtPd(v) {
 // mode PD and conflicts each show an original→new comparison when their value changed.
 // Purely visual — counts come from the precomputed locoMeta passed by the host.
 function modeloCellInner(group, state, availHeightPx) {
-  const RED_C = '#D32F2F', GRAY = '#9CA3AF', GREEN = '#15803D'
+  const RED_C = '#0D9488', GRAY = '#9CA3AF', GREEN = '#15803D'
   // Available vertical run for the rotated MODELO value (see frozenLabelStyle): the cell height.
   const modeloAvail = (typeof availHeightPx === 'number' && availHeightPx > 0) ? availHeightPx : FROZEN_LABEL_MAX_H
   // Locomotive model fallback: keep the ORIGINAL model name visible and append "(FB)" when the
@@ -1599,7 +1599,7 @@ function modeloCellInner(group, state, availHeightPx) {
     ? ((meta && meta.shiftDays) ? meta.shiftDays : 0)
     : (group._delayDays || 0)
   const shiftBadge = shiftDays > 0
-    ? `<span title="${state.isOptView ? 'Deslocado' : 'Atrasado'} ${shiftDays} dia(s)" style="font-size:9px;font-weight:800;color:${RED_C};background:#FFEBEE;border:1px solid ${RED_C}55;border-radius:4px;padding:0 3px;line-height:1.4;flex-shrink:0">+${shiftDays}</span>`
+    ? `<span title="${state.isOptView ? 'Deslocado' : 'Atrasado'} ${shiftDays} dia(s)" style="font-size:9px;font-weight:800;color:${RED_C};background:#F0FDFA;border:1px solid ${RED_C}55;border-radius:4px;padding:0 3px;line-height:1.4;flex-shrink:0">+${shiftDays}</span>`
     : ''
 
   // Resolved-conflict check icon (replaces any "Sem conflitos" text).
@@ -1662,7 +1662,7 @@ function modeloCellInner(group, state, availHeightPx) {
   // badge style used in the Resumo Geral LOCO list.
   const takt = (meta && typeof meta.takt === 'number' && isFinite(meta.takt) && meta.takt > 0) ? meta.takt : null
   const taktBadge = takt != null
-    ? `<span title="Takt do LOCO" style="font-size:9px;font-weight:700;color:${RED_C};background:#FFF0F0;border:1px solid ${RED_C};border-radius:4px;padding:0 4px;line-height:1.5;flex-shrink:0">T${takt}</span>`
+    ? `<span title="Takt do LOCO" style="font-size:9px;font-weight:700;color:${RED_C};background:#F0FDFA;border:1px solid ${RED_C};border-radius:4px;padding:0 4px;line-height:1.5;flex-shrink:0">T${takt}</span>`
     : ''
 
   // WS40↔WS50 swap indicator — icon-only, RED, at the TOP of the right column. Shown when the swap was

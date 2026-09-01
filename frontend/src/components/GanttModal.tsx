@@ -153,7 +153,7 @@ function RefModeDropdown({ mode, onChange }: { mode: ScheduleRefMode; onChange: 
                 // repaint the fill without wiping the stripes — and so nothing mixes the
                 // `background` shorthand with a longhand it would fight over.
                 style={{
-                  backgroundColor: active ? '#FFF0F0' : '#fff',
+                  backgroundColor: active ? '#F0FDFA' : '#fff',
                   ...(isStd ? { backgroundImage: HACHURE_ROW } : null),
                   color: active ? RED : (isStd ? '#111827' : '#9CA3AF'),
                   fontWeight: isStd ? 700 : active ? 400 : 500,
@@ -4095,7 +4095,7 @@ export function GanttModal({ visible = true, onClose, initialData, onDataLoaded,
                 className="flex-1 flex items-center justify-center gap-1.5 px-6 py-2.5 text-xs font-semibold transition-all select-none whitespace-nowrap"
                 style={{
                   borderBottom:    active ? `3px solid ${RED}` : '3px solid transparent',
-                  backgroundColor: active ? '#FFF5F5' : 'transparent',
+                  backgroundColor: active ? '#F0FDFA' : 'transparent',
                   color:           blocked ? '#9CA3AF' : scheduleLocked ? '#9CA3AF' : (active ? RED : '#6B7280'),
                   cursor:          blocked ? 'not-allowed' : 'pointer',
                   opacity:         blocked ? 0.8 : scheduleLocked ? 0.85 : 1,

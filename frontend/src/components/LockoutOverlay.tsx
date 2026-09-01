@@ -11,7 +11,7 @@ import { ShieldAlert } from 'lucide-react'
 import { subscribeUnlock, isLockedOut, isLockoutNoticeVisible, hideLockoutNotice } from '@/lib/unlockStore'
 import { usePermissions } from '@/context/PermissionsContext'
 
-const RED = '#D32F2F'
+const RED = '#0D9488'
 
 export function LockoutOverlay() {
   const locked  = useSyncExternalStore(subscribeUnlock, isLockedOut, () => false)

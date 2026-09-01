@@ -45,7 +45,7 @@ export function ConfirmDialog({
       <div className="bg-white rounded-lg shadow-2xl w-[400px] overflow-hidden">
 
         {/* Title bar */}
-        <div className="bg-[#D32F2F] text-white flex items-center justify-between px-4 py-2.5">
+        <div className="bg-[#0D9488] text-white flex items-center justify-between px-4 py-2.5">
           <span className="font-semibold text-sm tracking-wide">{title}</span>
           <button
             onClick={onCancel}
@@ -82,7 +82,7 @@ export function ConfirmDialog({
             onClick={onConfirm}
             className={`px-4 py-1.5 text-xs rounded text-white font-medium transition-colors ${
               danger
-                ? 'bg-[#D32F2F] hover:bg-[#B71C1C]'
+                ? 'bg-[#0D9488] hover:bg-[#0F766E]'
                 : 'bg-[#1565C0] hover:bg-[#0D47A1]'
             }`}
           >

@@ -17,14 +17,14 @@ export function ProgressBar({ value = 0, message, indeterminate = false, classNa
         {indeterminate ? (
           // Sliding bar animation — no custom keyframes needed
           <div
-            className="absolute inset-y-0 w-2/5 rounded-full bg-[#D32F2F]"
+            className="absolute inset-y-0 w-2/5 rounded-full bg-[#0D9488]"
             style={{
               animation: 'indeterminate-progress 1.4s ease-in-out infinite',
             }}
           />
         ) : (
           <div
-            className="h-2 rounded-full bg-[#D32F2F] transition-all duration-300"
+            className="h-2 rounded-full bg-[#0D9488] transition-all duration-300"
             style={{ width: `${Math.min(100, Math.max(0, value))}%` }}
           />
         )}

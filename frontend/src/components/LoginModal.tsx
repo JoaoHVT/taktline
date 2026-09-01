@@ -1,6 +1,5 @@
 'use client'
 import { useState } from 'react'
-import Image from 'next/image'
 import { Loader2, LogIn, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -25,7 +24,7 @@ import { useAuth } from '@/hooks/useAuth'
 const DEMO_USER = 'dev'
 const DEMO_PASSWORD = '1234'
 
-const RED = '#C62828'
+const RED = '#0D9488'
 
 function FieldLabel({ children }: { children: React.ReactNode }) {
   return <span className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide">{children}</span>
@@ -53,7 +52,7 @@ function PasswordInput({
         autoComplete={autoComplete}
         disabled={disabled}
         className="w-full border border-gray-300 rounded-lg px-3 py-2.5 pr-10 text-sm text-gray-900
-          focus:outline-none focus:ring-2 focus:ring-[#C62828]/40 focus:border-[#C62828]
+          focus:outline-none focus:ring-2 focus:ring-[#0D9488]/40 focus:border-[#0D9488]
           disabled:bg-gray-50 disabled:text-gray-400"
       />
       <button
@@ -97,17 +96,13 @@ export function LoginModal({ sessionExpired = false }: { sessionExpired?: boolea
 
         {/* ── Cabeçalho ─────────────────────────────────────────────── */}
         <div className="px-8 py-6 flex flex-col items-center gap-2" style={{ background: RED }}>
-          <Image
-            src="/imagens/wab2.png"
+          <img
+            src="/imagens/wordmark.svg"
             alt="Taktline"
-            width={140}
-            height={42}
-            className="object-contain brightness-0 invert"
-            priority
+            width={168}
+            height={41}
+            className="object-contain text-white"
           />
-          <span className="text-white/80 text-xs font-medium tracking-widest uppercase">
-            Taktline
-          </span>
         </div>
 
         {/* ── Corpo ─────────────────────────────────────────────────── */}
@@ -143,7 +138,7 @@ export function LoginModal({ sessionExpired = false }: { sessionExpired?: boolea
                   autoFocus
                   disabled={busy}
                   className="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900
-                    focus:outline-none focus:ring-2 focus:ring-[#C62828]/40 focus:border-[#C62828]
+                    focus:outline-none focus:ring-2 focus:ring-[#0D9488]/40 focus:border-[#0D9488]
                     disabled:bg-gray-50"
                 />
               </label>
@@ -162,10 +157,10 @@ export function LoginModal({ sessionExpired = false }: { sessionExpired?: boolea
                 type="submit"
                 disabled={busy || !username.trim() || !password}
                 className="w-full flex items-center justify-center gap-2.5 px-5 py-3
-                  bg-[#C62828] hover:bg-[#B71C1C] active:bg-[#A31818]
+                  bg-[#0D9488] hover:bg-[#0F766E] active:bg-[#115E59]
                   disabled:opacity-60 disabled:cursor-not-allowed
                   text-white font-semibold text-sm rounded-lg transition-colors shadow-sm
-                  focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C62828]/60"
+                  focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0D9488]/60"
               >
                 {busy
                   ? <><Loader2 className="w-4 h-4 animate-spin" /> Entrando…</>

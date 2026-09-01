@@ -48,9 +48,9 @@ export function windowGanttData(
   return { ...data, date_info: filtDates, groups: filtGroups }
 }
 
-export const RED    = '#D32F2F'
-export const RED_DK = '#B71C1C'
-export const RED_LT = '#FFEBEE'
+export const RED    = '#0D9488'
+export const RED_DK = '#0F766E'
+export const RED_LT = '#F0FDFA'
 
 export const FW_LIGHT: string[] = [
   '#DCEEFB', '#DDF3D4', '#FCE4D6', '#FFF3C4',

@@ -79,7 +79,7 @@ export function ConflictWsModal({ allWorkstations, onClose }: ConflictWsModalPro
               value={search}
               onChange={e => setSearch(e.target.value)}
               placeholder="Buscar workstation…"
-              className="pl-8 pr-3 py-1.5 text-sm text-black placeholder-gray-600 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#D32F2F] w-full"
+              className="pl-8 pr-3 py-1.5 text-sm text-black placeholder-gray-600 border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-[#0D9488] w-full"
             />
           </div>
 
@@ -91,7 +91,7 @@ export function ConflictWsModal({ allWorkstations, onClose }: ConflictWsModalPro
               items={available}
               emptyLabel="Nenhuma workstation disponível"
               onItem={w => move(w, true)}
-              trailing={<ArrowRight size={13} className="text-gray-300 group-hover:text-[#D32F2F]" />}
+              trailing={<ArrowRight size={13} className="text-gray-300 group-hover:text-[#0D9488]" />}
             />
             <ListPanel
               title="Selecionadas (conflito)"
@@ -100,7 +100,7 @@ export function ConflictWsModal({ allWorkstations, onClose }: ConflictWsModalPro
               emptyLabel="Nenhuma selecionada"
               highlight
               onItem={w => move(w, false)}
-              leading={<ArrowLeft size={13} className="text-red-200 group-hover:text-[#D32F2F]" />}
+              leading={<ArrowLeft size={13} className="text-red-200 group-hover:text-[#0D9488]" />}
             />
           </div>
 
@@ -145,9 +145,9 @@ function ListPanel({ title, count, items, emptyLabel, onItem, highlight, leading
   leading?: React.ReactNode; trailing?: React.ReactNode
 }) {
   return (
-    <div className="flex flex-col border rounded-lg overflow-hidden" style={{ borderColor: highlight ? '#FECACA' : '#E5E7EB' }}>
+    <div className="flex flex-col border rounded-lg overflow-hidden" style={{ borderColor: highlight ? '#99F6E4' : '#E5E7EB' }}>
       <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-wide flex items-center justify-between"
-        style={{ background: highlight ? '#FFF0F0' : '#F9FAFB', color: highlight ? RED : '#6B7280', borderBottom: `1px solid ${highlight ? '#FECACA' : '#E5E7EB'}` }}>
+        style={{ background: highlight ? '#F0FDFA' : '#F9FAFB', color: highlight ? RED : '#6B7280', borderBottom: `1px solid ${highlight ? '#99F6E4' : '#E5E7EB'}` }}>
         <span>{title}</span>
         <span className="tabular-nums">{count}</span>
       </div>

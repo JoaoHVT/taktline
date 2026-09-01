@@ -30,7 +30,7 @@ import type { TipoKey } from '@/lib/tipos'
  * wagons were still mid-track, so the reset teleported the whole consist away at once. Now
  * the tail is fully swallowed before the jump, and the entry reads car by car.
  */
-const RED = '#D32F2F'
+const RED = '#0D9488'
 
 const LOCO_W = 20
 const WAGON_W = 15
@@ -43,7 +43,7 @@ const BAND_H = 30           // container height; the extra room above the track 
 // `Record<TipoKey, …>` on purpose: registering a new Tipo must fail the build here rather
 // than render a locomotive with `undefined` for a livery.
 export const LINE_TYPE_COLORS: Record<TipoKey, string> = {
-  montagem: '#D32F2F',   // the app accent
+  montagem: '#0D9488',   // the app accent
 }
 
 /** Two neutral wagon shades — the "small visual variant", kept greyscale so wagons

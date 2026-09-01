@@ -184,7 +184,7 @@ export function PersonTable({
           const utilPct    = isPersonDisabled ? null : (data?.utilization_pct ?? (hasRealData ? 0 : null))
           const isUnallocated = !isPersonDisabled && allocations != null && allocH === 0
           const utilColor  = utilPct == null ? '#9CA3AF'
-            : utilPct > 100 ? '#C62828'
+            : utilPct > 100 ? '#0D9488'
             : utilPct > 85  ? '#E65100'
             : '#1B5E20'
           const allRestrictedForPerson = wsns.length > 0 && wsns.every(w => restrictedCards?.has(`${w}::${person}`) ?? false)

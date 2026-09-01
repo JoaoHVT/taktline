@@ -19,7 +19,7 @@ import { Ban } from 'lucide-react'
 import { subscribeUnlock, isBlocked, blockedReason } from '@/lib/unlockStore'
 import { usePermissions } from '@/context/PermissionsContext'
 
-const RED = '#D32F2F'
+const RED = '#0D9488'
 
 const COPY = {
   banned: {

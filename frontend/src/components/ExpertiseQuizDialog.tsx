@@ -188,7 +188,7 @@ function QuizDialogShell({
 // ── Person × workstation ────────────────────────────────────────────────────────────
 
 export function ExpertiseQuizDialog({
-  personName, wsn, wsDesc, initialAnswers, accent = '#D32F2F', onCancel, onApply,
+  personName, wsn, wsDesc, initialAnswers, accent = '#0D9488', onCancel, onApply,
 }: {
   personName: string
   wsn: string

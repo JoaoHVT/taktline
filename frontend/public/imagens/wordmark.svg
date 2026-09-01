@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 260 64" role="img" aria-label="Taktline">
+  <title>Taktline</title>
+  <!-- The mark plus the name. Used where there is room for both (login, header); the bare
+       mark.svg is used everywhere else. currentColor on the text so a dark header can invert
+       the whole thing without a second file. -->
+  <g>
+    <rect width="64" height="64" rx="14" fill="#0D9488"/>
+    <g fill="#FFFFFF">
+      <rect x="13" y="34" width="7" height="10" rx="2"/>
+      <rect x="24" y="28" width="7" height="16" rx="2"/>
+      <rect x="35" y="22" width="7" height="22" rx="2"/>
+      <rect x="46" y="16" width="7" height="28" rx="2"/>
+    </g>
+    <rect x="13" y="48" width="40" height="3" rx="1.5" fill="#99F6E4"/>
+  </g>
+  <text x="80" y="43" font-family="Segoe UI, Arial, Helvetica, sans-serif" font-size="30"
+        font-weight="700" letter-spacing="1.5" fill="currentColor">TAKTLINE</text>
+</svg>

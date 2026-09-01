@@ -22,7 +22,7 @@ export function ConfirmMini({
           >Cancelar</button>
           <button
             onClick={onConfirm}
-            className="px-3 py-1.5 text-xs bg-[#D32F2F] text-white rounded hover:bg-[#B71C1C] font-medium"
+            className="px-3 py-1.5 text-xs bg-[#0D9488] text-white rounded hover:bg-[#0F766E] font-medium"
           >{confirmLabel}</button>
         </div>
       </div>

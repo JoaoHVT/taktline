@@ -7,7 +7,7 @@ import { SCOPE_COLOR, SCOPE_LABEL } from '@/lib/assemblyConstants'
 const SCOPE_BG_LIGHT: Record<ScopeKey, string> = {
   LEVE:   '#E8F5E9',
   MEDIO:  '#FFF3E0',
-  PESADO: '#FFEBEE',
+  PESADO: '#F0FDFA',
   UNICO:  '#F3E5F5',
 }
 

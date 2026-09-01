@@ -7,8 +7,6 @@ import { getToken, refreshToken } from '@/lib/tokenStore'
 import { LocomotiveProgress, LINE_TYPE_COLORS } from './gantt/LocomotiveProgress'
 import { TIPOS, TIPO_KEYS, DEFAULT_TIPO_KEY, anyScheduleBacked } from '@/lib/tipos'
 import { SUMMARY_LINE_TYPE_MAP } from './gantt/useGanttFilters'
-import { useFileDrop } from '@/lib/useFileDrop'
-import { checkUploadSize } from '@/lib/uploadLimits'
 import type { AxiosError } from 'axios'
 
 // Tracks the last time Gantt data was freshly fetched — used to skip redundant silent refreshes
@@ -532,7 +530,7 @@ export function GanttLaunchModal({
           instead gives those 40px back: `items-stretch` on the chip row already matches the
           heights, so a wrapped label costs a slightly taller row and nothing else. */}
       <div ref={cardRef} className="bg-white rounded-lg shadow-2xl flex flex-col w-[420px] max-w-[94vw] overflow-hidden relative">
-        <div className="bg-[#D32F2F] text-white flex items-center justify-between px-4 py-2.5 shrink-0 relative">
+        <div className="bg-[#0D9488] text-white flex items-center justify-between px-4 py-2.5 shrink-0 relative">
           <div className="flex items-center gap-2">
             <BarChart2 size={15} />
             <span className="font-semibold text-sm tracking-wide">Abrir Master Schedule Gantt</span>
@@ -608,11 +606,11 @@ export function GanttLaunchModal({
               onClick={() => handleOpen(targetTab)}
               disabled={loadingFor !== null || schedulePreloading || scenarioLoading || cacheLoading || !periodValid || tokenReady === 'reauth-required'}
               title={!periodValid ? 'Selecione um período válido para continuar.' : tokenReady === 'reauth-required' ? 'Aguardando reautenticação…' : undefined}
-              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left relative overflow-hidden border-2 border-[#D32F2F] bg-[#FFF5F5] hover:bg-[#FFECEC]${(cacheLoading || !periodValid || tokenReady === 'reauth-required') ? ' cursor-not-allowed' : ''}`}
+              className={`flex items-center gap-3 px-4 py-3 rounded-lg transition-colors text-left relative overflow-hidden border-2 border-[#0D9488] bg-[#F0FDFA] hover:bg-[#CCFBF1]${(cacheLoading || !periodValid || tokenReady === 'reauth-required') ? ' cursor-not-allowed' : ''}`}
             >
               {(loadingFor !== null || schedulePreloading)
-                ? <Loader2 size={18} className="animate-spin" style={{ color: '#D32F2F', flexShrink: 0 }} />
-                : <BarChart2 size={18} style={{ color: '#D32F2F', flexShrink: 0 }} />
+                ? <Loader2 size={18} className="animate-spin" style={{ color: '#0D9488', flexShrink: 0 }} />
+                : <BarChart2 size={18} style={{ color: '#0D9488', flexShrink: 0 }} />
               }
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-semibold text-gray-800">Resumo Geral</div>
@@ -628,7 +626,7 @@ export function GanttLaunchModal({
               </div>
               {(loadingFor !== null || schedulePreloading) && (
                 <div className="absolute inset-x-0 bottom-0 h-1.5 bg-gray-200">
-                  <div className="h-full bg-[#D32F2F] transition-[width] duration-100" style={{ width: `${schedulePreloading ? scheduleProgress : loadProgress}%` }} />
+                  <div className="h-full bg-[#0D9488] transition-[width] duration-100" style={{ width: `${schedulePreloading ? scheduleProgress : loadProgress}%` }} />
                 </div>
               )}
             </button>
@@ -652,13 +650,13 @@ export function GanttLaunchModal({
                 : scheduleEnabled ? 'Schedule será carregado — clique para desativar' : 'Schedule não será carregado — clique para ativar'}
               className={`flex items-center gap-3 px-4 py-2.5 rounded-lg border transition-colors text-left${
                 scheduleOn
-                  ? ' border-[#D32F2F] bg-[#D32F2F]/5'
+                  ? ' border-[#0D9488] bg-[#0D9488]/5'
                   : ' border-dashed border-gray-300 bg-white hover:border-gray-400'
               }${(loadingFor !== null || schedulePreloading || !scheduleApplicable) ? ' opacity-60 cursor-not-allowed' : ''}`}
             >
-              <Layers size={17} style={{ color: scheduleOn ? '#D32F2F' : '#9CA3AF', flexShrink: 0 }} />
+              <Layers size={17} style={{ color: scheduleOn ? '#0D9488' : '#9CA3AF', flexShrink: 0 }} />
               <div className="flex-1 min-w-0">
-                <div className={`text-sm font-semibold ${scheduleOn ? 'text-[#B71C1C]' : 'text-gray-600'}`}>Schedule</div>
+                <div className={`text-sm font-semibold ${scheduleOn ? 'text-[#0F766E]' : 'text-gray-600'}`}>Schedule</div>
                 {/* ONE line, always. The "no schedule" wording was the longest of the three and
                     wrapped onto a second line, which grew the button and pushed the row beside it
                     around for that selection alone. Shortened to fit and clipped rather than
@@ -672,7 +670,7 @@ export function GanttLaunchModal({
               {/* Switch track */}
               <span
                 className="relative shrink-0 rounded-full transition-colors"
-                style={{ width: 40, height: 22, background: scheduleOn ? '#D32F2F' : '#D1D5DB' }}
+                style={{ width: 40, height: 22, background: scheduleOn ? '#0D9488' : '#D1D5DB' }}
               >
                 <span
                   className="absolute top-0.5 rounded-full bg-white shadow transition-all"
@@ -694,7 +692,7 @@ export function GanttLaunchModal({
               const active = selLineTypes.has(key)
               return (
                 <button key={key} onClick={() => toggleLineType(key)}
-                  className={`relative flex-1 min-w-0 px-1 py-1.5 text-[11px] leading-tight rounded border-2 font-semibold transition-colors ${active ? 'border-[#D32F2F] bg-[#D32F2F] text-white' : 'border-gray-300 bg-white text-gray-400 hover:border-gray-400'}`}
+                  className={`relative flex-1 min-w-0 px-1 py-1.5 text-[11px] leading-tight rounded border-2 font-semibold transition-colors ${active ? 'border-[#0D9488] bg-[#0D9488] text-white' : 'border-gray-300 bg-white text-gray-400 hover:border-gray-400'}`}
                 >
                   {label}
                 </button>
@@ -715,9 +713,9 @@ export function GanttLaunchModal({
                     title="Carregar o ano inteiro disponível"
                     className="text-[10px] font-semibold rounded cursor-pointer disabled:cursor-wait"
                     style={{
-                      border: `1px solid ${selYear ? '#D32F2F' : '#D1D5DB'}`,
-                      color: selYear ? '#D32F2F' : '#6B7280',
-                      background: selYear ? '#FFF5F5' : '#fff',
+                      border: `1px solid ${selYear ? '#0D9488' : '#D1D5DB'}`,
+                      color: selYear ? '#0D9488' : '#6B7280',
+                      background: selYear ? '#F0FDFA' : '#fff',
                       padding: '1px 4px', outline: 'none',
                     }}
                   >
@@ -727,19 +725,19 @@ export function GanttLaunchModal({
                 )}
               </div>
               {(cacheLoading || scenarioLoading)
-                ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Loader2 size={10} className="animate-spin" style={{ color: '#D32F2F' }} /><span style={{ fontSize: 10, color: '#D32F2F', fontWeight: 600 }}>Carregando...</span></span>
+                ? <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Loader2 size={10} className="animate-spin" style={{ color: '#0D9488' }} /><span style={{ fontSize: 10, color: '#0D9488', fontWeight: 600 }}>Carregando...</span></span>
                 : firstDate && lastDate && <span className="text-[10px] text-gray-400">{firstDate} – {lastDate}</span>
               }
             </div>
             <div className="px-3 py-2.5 flex flex-col gap-1.5">
               <div className="flex items-center gap-1.5">
-                <input type="checkbox" title="Usar primeira data disponível" checked={!!firstDate && dateFrom === firstDate} onChange={e => { setSelYear(''); setDateFrom(e.target.checked ? firstDate : '') }} style={{ accentColor: '#D32F2F', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }} />
+                <input type="checkbox" title="Usar primeira data disponível" checked={!!firstDate && dateFrom === firstDate} onChange={e => { setSelYear(''); setDateFrom(e.target.checked ? firstDate : '') }} style={{ accentColor: '#0D9488', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }} />
                 <input type="text" placeholder="De: dd/mm/aaaa" value={dateFrom} maxLength={10}
                   onChange={e => { setSelYear(''); setDateFrom(formatDateInput(e.target.value)) }}
                   onBlur={() => { const v = expandYear(dateFrom); if (v !== dateFrom) setDateFrom(v); if (v.length >= 8) setDateFrom(clampDate(v, firstDate, lastDate)) }}
                   className="min-w-0 flex-1 text-xs text-gray-900 text-center rounded px-1.5 py-1.5 focus:outline-none tabular-nums"
                   style={{ border: `1px solid ${!fromISO && dateFrom.length > 0 ? '#FCA5A5' : '#D1D5DB'}`, outline: 'none' }}
-                  onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #D32F2F55' }}
+                  onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #0D948855' }}
                   onBlurCapture={e => { e.currentTarget.style.boxShadow = '' }}
                 />
                 <span className="text-gray-400 text-xs shrink-0">–</span>
@@ -748,10 +746,10 @@ export function GanttLaunchModal({
                   onBlur={() => { const v = expandYear(dateTo); if (v !== dateTo) setDateTo(v); if (v.length >= 8) setDateTo(clampDate(v, firstDate, lastDate)) }}
                   className="min-w-0 flex-1 text-xs text-gray-900 text-center rounded px-1.5 py-1.5 focus:outline-none tabular-nums"
                   style={{ border: `1px solid ${!toISO && dateTo.length > 0 ? '#FCA5A5' : '#D1D5DB'}`, outline: 'none' }}
-                  onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #D32F2F55' }}
+                  onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #0D948855' }}
                   onBlurCapture={e => { e.currentTarget.style.boxShadow = '' }}
                 />
-                <input type="checkbox" title="Usar última data disponível" checked={!!lastDate && dateTo === lastDate} onChange={e => { setSelYear(''); setDateTo(e.target.checked ? lastDate : '') }} style={{ accentColor: '#D32F2F', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }} />
+                <input type="checkbox" title="Usar última data disponível" checked={!!lastDate && dateTo === lastDate} onChange={e => { setSelYear(''); setDateTo(e.target.checked ? lastDate : '') }} style={{ accentColor: '#0D9488', cursor: 'pointer', width: 14, height: 14, flexShrink: 0 }} />
               </div>
               {!periodValid && <p className="text-[10px] font-medium" style={{ color: '#D32F2F' }}>Selecione um período válido para continuar.</p>}
             </div>
@@ -771,15 +769,15 @@ export function GanttLaunchModal({
             )}
             {/* Comparison armed: two scenarios loaded — mirrors the single-scenario status block. */}
             {comparisonActive && (
-              <div className="flex items-start gap-2 px-3 py-2 bg-[#FFF5F5] border border-[#FECACA] rounded-lg">
-                <GitCompare size={13} style={{ color: '#D32F2F', flexShrink: 0, marginTop: 1 }} />
+              <div className="flex items-start gap-2 px-3 py-2 bg-[#F0FDFA] border border-[#99F6E4] rounded-lg">
+                <GitCompare size={13} style={{ color: '#0D9488', flexShrink: 0, marginTop: 1 }} />
                 <div className="flex-1 min-w-0">
-                  <div className="text-xs font-semibold text-[#D32F2F]">Cenários carregados e prontos para comparação</div>
+                  <div className="text-xs font-semibold text-[#0D9488]">Cenários carregados e prontos para comparação</div>
                   <div className="text-[11px] text-gray-600 truncate" title={comparisonBaseName}><span className="font-semibold">Base:</span> {comparisonBaseName || '—'}</div>
                   <div className="text-[11px] text-gray-600 truncate" title={comparisonTargetName}><span className="font-semibold">Target:</span> {comparisonTargetName || '—'}</div>
                 </div>
                 <button onClick={() => onComparisonRemove?.()}
-                  className="text-[11px] text-[#D32F2F] hover:text-[#B71C1C] font-medium whitespace-nowrap px-1 py-0.5 rounded hover:bg-[#FFECEC] transition-colors" title="Remover cenários e voltar ao fluxo de cenário único"
+                  className="text-[11px] text-[#0D9488] hover:text-[#0F766E] font-medium whitespace-nowrap px-1 py-0.5 rounded hover:bg-[#CCFBF1] transition-colors" title="Remover cenários e voltar ao fluxo de cenário único"
                 >✕ Remover</button>
               </div>
             )}

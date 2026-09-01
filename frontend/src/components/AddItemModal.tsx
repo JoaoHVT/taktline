@@ -249,7 +249,7 @@ export function AddItemModal({ onAdd, onClose }: Props) {
       >
 
         {/* Title bar */}
-        <div className="bg-[#D32F2F] text-white flex items-center justify-between px-4 py-2.5 shrink-0">
+        <div className="bg-[#0D9488] text-white flex items-center justify-between px-4 py-2.5 shrink-0">
           <div className="flex items-center gap-2">
             <Plus size={13} className="shrink-0" />
             <span className="font-semibold text-sm tracking-wide">Adicionar item por família</span>
@@ -270,18 +270,18 @@ export function AddItemModal({ onAdd, onClose }: Props) {
               onClick={() => setLocosMode(false)}
               className={`rounded-xl border-2 px-4 py-3 flex items-center gap-3 cursor-pointer select-none transition-all ${
                 !locosMode
-                  ? 'border-[#D32F2F] bg-red-50 shadow-sm'
+                  ? 'border-[#0D9488] bg-red-50 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/80'
               }`}
             >
-              <div className={`p-2 rounded-lg shrink-0 ${!locosMode ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-gray-400'}`}>
+              <div className={`p-2 rounded-lg shrink-0 ${!locosMode ? 'bg-[#0D9488] text-white' : 'bg-gray-100 text-gray-400'}`}>
                 <LayoutList size={16} />
               </div>
               <div className="min-w-0">
-                <div className={`font-bold text-xs tracking-widest ${!locosMode ? 'text-[#D32F2F]' : 'text-gray-400'}`}>NORMAL</div>
+                <div className={`font-bold text-xs tracking-widest ${!locosMode ? 'text-[#0D9488]' : 'text-gray-400'}`}>NORMAL</div>
                 <div className={`text-[10px] mt-0.5 ${!locosMode ? 'text-red-400' : 'text-gray-400'}`}>Todos os itens do catálogo</div>
               </div>
-              {!locosMode && <div className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] ml-auto shrink-0" />}
+              {!locosMode && <div className="w-1.5 h-1.5 rounded-full bg-[#0D9488] ml-auto shrink-0" />}
             </div>
 
             {/* NEW LOCOS */}
@@ -289,18 +289,18 @@ export function AddItemModal({ onAdd, onClose }: Props) {
               onClick={() => setLocosMode(true)}
               className={`rounded-xl border-2 px-4 py-3 flex items-center gap-3 cursor-pointer select-none transition-all ${
                 locosMode
-                  ? 'border-[#D32F2F] bg-red-50 shadow-sm'
+                  ? 'border-[#0D9488] bg-red-50 shadow-sm'
                   : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50/80'
               }`}
             >
-              <div className={`p-2 rounded-lg shrink-0 ${locosMode ? 'bg-[#D32F2F] text-white' : 'bg-gray-100 text-gray-400'}`}>
+              <div className={`p-2 rounded-lg shrink-0 ${locosMode ? 'bg-[#0D9488] text-white' : 'bg-gray-100 text-gray-400'}`}>
                 <Star size={16} />
               </div>
               <div className="min-w-0">
-                <div className={`font-bold text-xs tracking-widest ${locosMode ? 'text-[#D32F2F]' : 'text-gray-400'}`}>NEW LOCOS</div>
+                <div className={`font-bold text-xs tracking-widest ${locosMode ? 'text-[#0D9488]' : 'text-gray-400'}`}>NEW LOCOS</div>
                 <div className={`text-[10px] mt-0.5 ${locosMode ? 'text-red-400' : 'text-gray-400'}`}>Itens exclusivos New Locos</div>
               </div>
-              {locosMode && <div className="w-1.5 h-1.5 rounded-full bg-[#D32F2F] ml-auto shrink-0" />}
+              {locosMode && <div className="w-1.5 h-1.5 rounded-full bg-[#0D9488] ml-auto shrink-0" />}
             </div>
 
           </div>
@@ -420,7 +420,7 @@ export function AddItemModal({ onAdd, onClose }: Props) {
                       title={allChecked ? 'Desmarcar todos' : 'Marcar todos'}
                       className={`flex flex-col items-center justify-center gap-0.5 w-10 h-10 rounded-xl mx-auto transition-all border-2 ${
                         allChecked
-                          ? 'bg-[#D32F2F] border-[#D32F2F] text-white shadow-md'
+                          ? 'bg-[#0D9488] border-[#0D9488] text-white shadow-md'
                           : someChecked
                             ? 'bg-red-50 border-red-400 text-red-500'
                             : filtered.length > 0
@@ -504,7 +504,7 @@ export function AddItemModal({ onAdd, onClose }: Props) {
             <button
               onClick={handleAdd}
               disabled={selected.size === 0}
-              className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#D32F2F] text-white rounded-lg hover:bg-red-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
+              className="flex items-center gap-1.5 px-4 py-1.5 text-xs bg-[#0D9488] text-white rounded-lg hover:bg-red-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed font-medium"
             >
               <Plus size={12} className="shrink-0" />
               Adicionar {selected.size > 0 ? `(${selected.size} itens)` : ''}

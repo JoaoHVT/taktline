@@ -14,8 +14,8 @@
  * Tipos/Modelos/Locos ordered by earliest Start Date.
  *
  * Per-locomotive status (Current Date vs Start Date):
- *   started  (today ≥ start) → ES_SIDE icon + progress bars
- *   standby  (today < start) → ES_FRONT icon + "Standby" badge (no percentage)
+ *   started  (today ≥ start) → progress bars
+ *   standby  (today < start) → "Standby" badge (no percentage)
  *
  * Actual hours (green) come from the Horas Transacionadas snapshot stored in our own DB,
  * never from the warehouse — so every role sees them. NEW LOCOS ONLY: hours reach a locomotive
@@ -117,7 +117,7 @@ function timelinePct(startIso: string, finishIso: string, today: string): number
 
 // ── Tabular column widths (px) — identical on every Tipo/Modelo/Loco row so
 // counters, dates, bars and hours line up vertically across all sections. ──────
-//   icon   — fixed slot for the ES_SIDE/ES_FRONT loco icon (New Locos only); the slot
+//   icon   — fixed slot for the per-Tipo icon (see TYPE_ICONS, empty in this build); the slot
 //            is ALWAYS present (empty for other Tipos) so loco names stay aligned.
 //   status — fixed slot for the aggregated "icon + qty" status chips on Tipo/Modelo
 //            rows, so following columns never shift as counts change.
@@ -136,7 +136,7 @@ function SpinnerCard({ height = 120 }: { height?: number }) {
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
     }}>
-      <img src="/imagens/wab1.png" alt="" width={28} height={28} className="animate-spin" />
+      <img src="/imagens/mark.svg" alt="" width={28} height={28} className="animate-spin" />
     </div>
   )
 }
@@ -144,7 +144,7 @@ function SpinnerCard({ height = 120 }: { height?: number }) {
 /** Per-Tipo row icon, in two states.
  *
  *  Every pair is ONE subject drawn two ways — side profile for a started unit, the head-on
- *  view for one still waiting — which is the rule ES_SIDE.png / ES_FRONT.png already set
+ *  view for one still waiting — which is the rule the per-Tipo icons already set
  *  for New Locos. "Has it started" then reads off the silhouette without a legend, and a
  *  new Tipo only ever needs two more files.
  *
@@ -833,11 +833,11 @@ export function FactoryLoadHome() {
                 }}>
                   {/* Tipo card header — fixed columns: counter | início | fim | horas */}
                   {leaf ? (
-                    <div style={{ ...rowBase, padding: '12px 14px', cursor: 'default', background: 'linear-gradient(to right, #fff, #FFF8F8)' }}>
+                    <div style={{ ...rowBase, padding: '12px 14px', cursor: 'default', background: 'linear-gradient(to right, #fff, #F0FDFA)' }}>
                       {header}
                     </div>
                   ) : (
-                    <button onClick={() => toggleType(t.key)} style={{ ...rowBase, padding: '12px 14px', background: tOpen ? '#FFF5F5' : 'linear-gradient(to right, #fff, #FFF8F8)' }}>
+                    <button onClick={() => toggleType(t.key)} style={{ ...rowBase, padding: '12px 14px', background: tOpen ? '#F0FDFA' : 'linear-gradient(to right, #fff, #F0FDFA)' }}>
                       {header}
                     </button>
                   )}

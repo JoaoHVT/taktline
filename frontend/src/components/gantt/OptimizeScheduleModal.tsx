@@ -242,7 +242,7 @@ export function OptimizeScheduleModal({
               className="h-1.5 rounded-full transition-all duration-500"
               style={{
                 width: `${progress}%`,
-                backgroundColor: isDone ? '#4CAF50' : isError ? '#EF4444' : '#D32F2F',
+                backgroundColor: isDone ? '#4CAF50' : isError ? '#EF4444' : '#0D9488',
               }}
             />
           </div>
@@ -289,7 +289,7 @@ export function OptimizeScheduleModal({
               </div>
               <button
                 onClick={onClose}
-                className="px-5 py-2 bg-[#D32F2F] hover:bg-[#B71C1C] text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
+                className="px-5 py-2 bg-[#0D9488] hover:bg-[#0F766E] text-white rounded-lg text-sm font-semibold transition-colors whitespace-nowrap"
               >
                 Ver Schedule →
               </button>

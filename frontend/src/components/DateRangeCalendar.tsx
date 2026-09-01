@@ -7,7 +7,7 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Trash2, CalendarPlus, X } from 'lucide-react'
 
-const RED = '#D32F2F'
+const RED = '#0D9488'
 const DOW_PT = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
 const MONTHS_PT = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro']
@@ -57,7 +57,7 @@ function brief(d: string): string {
 
 export function DateRangeCalendar({
   start, end, onChange, periods, onRemovePeriod,
-  accentColor = RED, accentBg = '#FFEBEE',
+  accentColor = RED, accentBg = '#F0FDFA',
 }: Props) {
   const today = new Date()
   // Open on whatever the user most likely wants to see: the range being picked, else the FIRST
@@ -193,7 +193,7 @@ export function DateRangeCalendar({
           <button
             type="button"
             onClick={() => { onRemovePeriod?.(openMenu.period); setDayMenu(null) }}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11.5px] text-[#C62828] hover:bg-red-50 text-left"
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 text-[11.5px] text-[#0D9488] hover:bg-red-50 text-left"
           >
             <Trash2 size={12} className="shrink-0" />Remover férias
           </button>

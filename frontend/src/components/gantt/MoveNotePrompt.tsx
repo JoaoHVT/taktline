@@ -309,7 +309,7 @@ export function MoveNotePrompt({ prevNotes, rowCount, recovery = false, propagat
             placeholder="Por que este movimento?"
             autoFocus
             autoComplete="off"
-            className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] text-black placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F]"
+            className="w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-[12px] text-black placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#0D9488] focus:border-[#0D9488]"
           />
 
           {/* History hint. Rendered ONLY when it says something: it used to reserve `min-h-[13px]`

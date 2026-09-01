@@ -39,7 +39,7 @@ function CompactField({
             const v = parseFloat(e.target.value)
             if (!isNaN(v)) onChange(Math.min(max, Math.max(min, parseFloat(v.toFixed(decimals)))))
           }}
-          className="w-12 text-center text-xs font-semibold text-gray-900 border border-gray-300 rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-[#D32F2F] tabular-nums"
+          className="w-12 text-center text-xs font-semibold text-gray-900 border border-gray-300 rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-[#0D9488] tabular-nums"
         />
         <button
           type="button"

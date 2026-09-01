@@ -124,9 +124,9 @@ function MesFwInfoBox({ importMeta, activeMeses, activeFws, onChangeMeses, onCha
   return (
     <div className="relative flex items-center gap-1" ref={ref}>
       {/* Info badge */}
-      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#D32F2F]/10 border border-[#D32F2F]/30 rounded text-xs text-[#B71C1C] font-medium select-none shrink-0">
+      <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#0D9488]/10 border border-[#0D9488]/30 rounded text-xs text-[#0F766E] font-medium select-none shrink-0">
         <span className="font-semibold">{mesLabel}</span>
-        <span className="text-[#D32F2F]/50">|</span>
+        <span className="text-[#0D9488]/50">|</span>
         <span title={fwLabel !== fwLabelFull ? fwLabelFull : undefined}>{fwLabel}</span>
       </div>
 
@@ -138,7 +138,7 @@ function MesFwInfoBox({ importMeta, activeMeses, activeFws, onChangeMeses, onCha
           onClick={() => setOpen(v => !v)}
           className={`p-1 rounded transition-colors ${
             isFiltered
-              ? 'bg-[#D32F2F]/15 text-[#B71C1C] border border-[#D32F2F]/30'
+              ? 'bg-[#0D9488]/15 text-[#0F766E] border border-[#0D9488]/30'
               : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
           }`}
         >
@@ -168,7 +168,7 @@ function MesFwInfoBox({ importMeta, activeMeses, activeFws, onChangeMeses, onCha
                   onClick={() => { onChangeMeses(new Set()); setOpen(false) }}
                 >
                   {activeMeses.size === 0
-                    ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                    ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                     : <Square size={12} className="text-gray-400 shrink-0" />}
                   Todos
                 </div>
@@ -184,7 +184,7 @@ function MesFwInfoBox({ importMeta, activeMeses, activeFws, onChangeMeses, onCha
                     }}
                   >
                     {(activeMeses.size === 0 || activeMeses.has(m))
-                      ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                      ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                       : <Square size={12} className="text-gray-400 shrink-0" />}
                     {String(m).padStart(2, '0')} {MES_LABELS[m] ?? m}
                   </div>
@@ -201,7 +201,7 @@ function MesFwInfoBox({ importMeta, activeMeses, activeFws, onChangeMeses, onCha
                   onClick={() => { onChangeFws(new Set()); setOpen(false) }}
                 >
                   {activeFws.size === 0
-                    ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                    ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                     : <Square size={12} className="text-gray-400 shrink-0" />}
                   Todas
                 </div>
@@ -216,7 +216,7 @@ function MesFwInfoBox({ importMeta, activeMeses, activeFws, onChangeMeses, onCha
                     }}
                   >
                     {(activeFws.size === 0 || activeFws.has(fw))
-                      ? <CheckSquare size={12} className="text-[#D32F2F] shrink-0" />
+                      ? <CheckSquare size={12} className="text-[#0D9488] shrink-0" />
                       : <Square size={12} className="text-gray-400 shrink-0" />}
                     {fmtFw(fw)}
                   </div>
@@ -806,14 +806,14 @@ function MainContent({ mode }: { mode?: 'analise' | 'gantt' }) {
           <>
             <p className="text-2xl font-semibold text-gray-800 leading-tight">Master Schedule</p>
             <p className="text-base md:text-lg text-gray-400 leading-relaxed text-center max-w-[720px]">
-              Clique no botão <span className="font-semibold text-[#D32F2F]">Gantt</span> na barra de ferramentas para definir um período e visualizar o Master Schedule.
+              Clique no botão <span className="font-semibold text-[#0D9488]">Gantt</span> na barra de ferramentas para definir um período e visualizar o Master Schedule.
             </p>
           </>
         ) : (
           <>
             <p className="text-2xl font-semibold text-gray-800 leading-tight">Nenhum item carregado</p>
             <p className="text-base md:text-lg text-gray-400 leading-relaxed text-center max-w-[720px]">
-              Use o botão <span className="font-semibold text-[#D32F2F]">Simular</span> na barra de ferramentas para importar novos itens.
+              Use o botão <span className="font-semibold text-[#0D9488]">Simular</span> na barra de ferramentas para importar novos itens.
             </p>
           </>
         )}
@@ -846,7 +846,7 @@ function MainContent({ mode }: { mode?: 'analise' | 'gantt' }) {
         </p>
         {assemblyLoading && (
           <span className="flex items-center gap-1.5 text-xs text-gray-400">
-            <img src="/imagens/wab1.png" alt="" width={16} height={16} className="animate-spin" />
+            <img src="/imagens/mark.svg" alt="" width={16} height={16} className="animate-spin" />
             Carregando dados…
           </span>
         )}

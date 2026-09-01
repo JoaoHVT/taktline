@@ -63,7 +63,7 @@ export function SavePasswordModal({ onConfirm, onClose, title, message }: {
                 autoComplete="new-password"
                 autoFocus
                 disabled={sent}
-                className="no-native-reveal w-full border border-gray-300 rounded-lg px-3 py-2 pr-9 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F] disabled:opacity-50"
+                className="no-native-reveal w-full border border-gray-300 rounded-lg px-3 py-2 pr-9 text-sm text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#0D9488] focus:border-[#0D9488] disabled:opacity-50"
                 onKeyDown={e => {
                   if (e.key === 'Enter') { e.preventDefault(); submit() }
                   else if (e.key === 'Escape' && !sent) { e.preventDefault(); onClose() }

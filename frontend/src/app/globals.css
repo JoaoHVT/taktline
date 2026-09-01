@@ -3,6 +3,29 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+
+  /* ── Accent ────────────────────────────────────────────────────────────────
+     The app used to run on one red for two different jobs: the brand accent and
+     the error state. That only worked because the brand happened to be red, and
+     it meant an error message and a primary button were literally the same
+     colour. They are separate now: --accent is turquoise, --danger stays red,
+     and --warning is the amber that was already in use.
+
+     These tokens are declared for the next change, not consumed by every call
+     site yet: the components still carry the hex values, which is what a
+     mechanical recolour can verify. Anything NEW should reach for the token. */
+  --accent:        #0D9488;
+  --accent-strong: #0F766E;
+  --accent-dark:   #115E59;
+  --accent-tint:   #CCFBF1;
+  --accent-wash:   #F0FDFA;
+  --accent-border: #99F6E4;
+
+  --danger:        #D32F2F;
+  --danger-tint:   #FFF5F5;
+  --danger-border: #FECACA;
+
+  --warning:       #F59E0B;
 }
 
 @theme inline {
@@ -37,46 +60,46 @@ input[type=number] {
 }
 
 /* ── Simular wave-pulse: red ripple on button label ───────────── */
-@keyframes wab-wave {
+@keyframes pulse-wave {
   0%   { color: #9CA3AF; text-shadow: none; }
-  40%  { color: #D32F2F; text-shadow: 0 0 8px #D32F2F99, 0 0 16px #D32F2F44; }
-  70%  { color: #B71C1C; text-shadow: 0 0 14px #B71C1C88; }
+  40%  { color: #0D9488; text-shadow: 0 0 8px #0D948899, 0 0 16px #0D948844; }
+  70%  { color: #0F766E; text-shadow: 0 0 14px #0F766E88; }
   100% { color: #9CA3AF; text-shadow: none; }
 }
 
-@keyframes wab-ring {
-  0%   { box-shadow: 0 0 0 0px #D32F2F55; }
-  60%  { box-shadow: 0 0 0 6px #D32F2F00; }
-  100% { box-shadow: 0 0 0 0px #D32F2F00; }
+@keyframes pulse-ring {
+  0%   { box-shadow: 0 0 0 0px #0D948855; }
+  60%  { box-shadow: 0 0 0 6px #0D948800; }
+  100% { box-shadow: 0 0 0 0px #0D948800; }
 }
 
 .simular-wave-label {
-  animation: wab-wave 2s ease-in-out infinite;
+  animation: pulse-wave 2s ease-in-out infinite;
 }
 
 .simular-wave-btn {
-  animation: wab-ring 2s ease-in-out infinite;
+  animation: pulse-ring 2s ease-in-out infinite;
 }
 
-@keyframes wab-icon-wave {
+@keyframes pulse-icon-wave {
   0%   { opacity: 0.55; filter: none; }
-  40%  { opacity: 1;    filter: drop-shadow(0 0 4px #D32F2F88); }
-  70%  { opacity: 0.9;  filter: drop-shadow(0 0 6px #B71C1C77); }
+  40%  { opacity: 1;    filter: drop-shadow(0 0 4px #0D948888); }
+  70%  { opacity: 0.9;  filter: drop-shadow(0 0 6px #0F766E77); }
   100% { opacity: 0.55; filter: none; }
 }
 
 .simular-wave-icon {
-  animation: wab-icon-wave 2s ease-in-out infinite;
+  animation: pulse-icon-wave 2s ease-in-out infinite;
 }
 
 /* ── Horizontal wave for ModoDropdown option labels ── */
-@keyframes wab-wave-h {
+@keyframes pulse-wave-h {
   0%, 100% { color: inherit; text-shadow: none; }
-  50%      { color: #D32F2F; text-shadow: 0 0 6px #D32F2F55; }
+  50%      { color: #0D9488; text-shadow: 0 0 6px #0D948855; }
 }
 
 .modo-wave-label {
-  animation: wab-wave-h 2s ease-in-out infinite;
+  animation: pulse-wave-h 2s ease-in-out infinite;
 }
 
 /* ── App-switch locomotive: the button that changes app ─────────────

@@ -165,7 +165,7 @@ export function MoveNotePopover({ notes, title, x, y, canEdit = false, onEdit, o
                       placeholder="Observação"
                       autoFocus
                       autoComplete="off"
-                      className="w-full border border-gray-300 rounded-md px-1.5 py-1 text-[11px] text-black placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#D32F2F] focus:border-[#D32F2F]"
+                      className="w-full border border-gray-300 rounded-md px-1.5 py-1 text-[11px] text-black placeholder:text-gray-400 focus:outline-none focus:ring-1 focus:ring-[#0D9488] focus:border-[#0D9488]"
                     />
                     <div className="mt-1 flex items-center gap-1.5">
                       <button
@@ -194,7 +194,7 @@ export function MoveNotePopover({ notes, title, x, y, canEdit = false, onEdit, o
                         {n.category && (
                           <span
                             className="inline-block mb-0.5 px-1.5 py-[1px] rounded border text-[9px] font-bold uppercase tracking-wide"
-                            style={{ borderColor: `${RED}55`, color: RED, background: '#FFF5F5' }}
+                            style={{ borderColor: `${RED}55`, color: RED, background: '#F0FDFA' }}
                           >
                             {n.category}
                           </span>

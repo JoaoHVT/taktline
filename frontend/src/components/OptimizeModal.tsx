@@ -93,7 +93,7 @@ function NumberField({
             const v = parseFloat(e.target.value)
             if (!isNaN(v)) onChange(Math.min(max, Math.max(min, parseFloat(v.toFixed(decimals)))))
           }}
-          className="w-16 text-center text-sm font-semibold text-gray-900 border border-gray-300 rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-[#D32F2F] tabular-nums"
+          className="w-16 text-center text-sm font-semibold text-gray-900 border border-gray-300 rounded py-0.5 focus:outline-none focus:ring-1 focus:ring-[#0D9488] tabular-nums"
         />
         <button
           type="button"
@@ -149,7 +149,7 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
       <div className="bg-white rounded-lg shadow-2xl flex flex-col w-[92vw] max-w-sm overflow-hidden">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 bg-[#D32F2F] shrink-0">
+        <div className="flex items-center justify-between px-4 py-3 bg-[#0D9488] shrink-0">
           {step === 'params' ? (
             <button
               onClick={() => setStep(hasPreviousResult ? 'confirm' : 'mode')}
@@ -194,11 +194,11 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
               className={`flex items-center gap-3 px-4 py-3.5 rounded-lg border-2 transition-colors text-left group ${
                 hasPreviousResult
                   ? 'border-gray-200 bg-gray-50 hover:bg-gray-100'
-                  : 'border-[#D32F2F] bg-red-50 hover:bg-red-100'
+                  : 'border-[#0D9488] bg-red-50 hover:bg-red-100'
               }`}
             >
               <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                hasPreviousResult ? 'bg-gray-200' : 'bg-[#D32F2F]'
+                hasPreviousResult ? 'bg-gray-200' : 'bg-[#0D9488]'
               }`}>
                 <Play size={14} className={hasPreviousResult ? 'text-gray-600 ml-0.5' : 'text-white ml-0.5'} />
               </div>
@@ -215,12 +215,12 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
               onClick={() => { onEstadoAtual?.(); onClose() }}
               className={`flex items-center gap-3 px-4 py-3.5 rounded-lg border-2 transition-colors text-left group ${
                 hasPreviousResult
-                  ? 'border-[#D32F2F] bg-red-50 hover:bg-red-100'
+                  ? 'border-[#0D9488] bg-red-50 hover:bg-red-100'
                   : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
               }`}
             >
               <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                hasPreviousResult ? 'bg-[#D32F2F]' : 'bg-gray-200'
+                hasPreviousResult ? 'bg-[#0D9488]' : 'bg-gray-200'
               }`}>
                 <BarChart2 size={14} className={hasPreviousResult ? 'text-white' : 'text-gray-600'} />
               </div>
@@ -257,9 +257,9 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
             <div className="flex flex-col gap-2">
               <button
                 onClick={() => setStep('params')}
-                className="flex items-center gap-3 px-4 py-3 rounded-lg border-2 border-[#D32F2F] bg-red-50 hover:bg-red-100 transition-colors text-left"
+                className="flex items-center gap-3 px-4 py-3 rounded-lg border-2 border-[#0D9488] bg-red-50 hover:bg-red-100 transition-colors text-left"
               >
-                <div className="w-7 h-7 rounded-full bg-[#D32F2F] flex items-center justify-center shrink-0">
+                <div className="w-7 h-7 rounded-full bg-[#0D9488] flex items-center justify-center shrink-0">
                   <Play size={12} className="text-white ml-0.5" />
                 </div>
                 <div>
@@ -315,14 +315,14 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
             <label
               className={`mt-2 flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border-2 cursor-pointer select-none transition-colors ${
                 expertise
-                  ? 'border-[#D32F2F] bg-[#FEF2F2]'
+                  ? 'border-[#0D9488] bg-[#FEF2F2]'
                   : 'border-gray-200 bg-gray-50 hover:bg-gray-100'
               }`}
             >
               <div className="flex items-center gap-2 min-w-0">
                 <span
                   className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-colors"
-                  style={{ background: expertise ? '#D32F2F' : '#E5E7EB' }}
+                  style={{ background: expertise ? '#0D9488' : '#E5E7EB' }}
                 >
                   <GraduationCap size={14} className={expertise ? 'text-white' : 'text-gray-500'} />
                 </span>
@@ -330,7 +330,7 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
                   <span className={`text-sm font-semibold ${expertise ? 'text-gray-900' : 'text-gray-500'}`}>
                     Habilitar Expertise
                   </span>
-                  <span className={`text-[11px] leading-tight truncate ${expertise ? 'text-[#D32F2F]' : 'text-gray-400'}`}>
+                  <span className={`text-[11px] leading-tight truncate ${expertise ? 'text-[#0D9488]' : 'text-gray-400'}`}>
                     Prioriza nível alvo de expertise
                   </span>
                 </div>
@@ -340,9 +340,9 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
                   type="checkbox"
                   checked={expertise}
                   onChange={e => setExpertise(e.target.checked)}
-                  style={{ accentColor: '#D32F2F', width: 16, height: 16 }}
+                  style={{ accentColor: '#0D9488', width: 16, height: 16 }}
                 />
-                <span className={`grid text-[11px] font-semibold ${expertise ? 'text-[#D32F2F]' : 'text-gray-400'}`}>
+                <span className={`grid text-[11px] font-semibold ${expertise ? 'text-[#0D9488]' : 'text-gray-400'}`}>
                   <span aria-hidden className="col-start-1 row-start-1 invisible">Desativado</span>
                   <span className="col-start-1 row-start-1">{expertise ? 'Ativado' : 'Desativado'}</span>
                 </span>
@@ -393,7 +393,7 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
                     <div
                       key={f}
                       className="flex-1 h-1.5 rounded-full transition-colors"
-                      style={{ backgroundColor: f <= phases ? '#D32F2F' : '#E5E7EB' }}
+                      style={{ backgroundColor: f <= phases ? '#0D9488' : '#E5E7EB' }}
                     />
                   ))}
                 </div>
@@ -422,7 +422,7 @@ export function OptimizeModal({ onClose, onRunSolver, onEstadoAtual, hasPrevious
               <button
                 onClick={handleRunSolver}
                 className="px-5 py-1.5 text-xs text-white rounded hover:opacity-90 transition-opacity font-semibold flex items-center gap-1.5"
-                style={{ backgroundColor: '#D32F2F' }}
+                style={{ backgroundColor: '#0D9488' }}
               >
                 <Play size={11} className="ml-0.5" />
                 Iniciar

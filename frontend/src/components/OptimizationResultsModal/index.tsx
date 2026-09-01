@@ -606,7 +606,7 @@ export function OptimizationResultsModal({
               {!isSkillMatrix && <span className="text-gray-500 whitespace-nowrap">
                 Alocado: <strong className="text-gray-800">{fmt1(totalAllocated)} h</strong>
               </span>}
-              {!isSkillMatrix && <span className="whitespace-nowrap font-semibold" style={{ color: deltaHours > 0.05 ? '#C62828' : '#1B5E20' }}>
+              {!isSkillMatrix && <span className="whitespace-nowrap font-semibold" style={{ color: deltaHours > 0.05 ? '#0D9488' : '#1B5E20' }}>
                 Δ {deltaHours > 0.05 ? `−${fmt1(deltaHours)}` : '0,0'} h
               </span>}
               {!isSkillMatrix && totalOvertime > 0 && (
@@ -615,7 +615,7 @@ export function OptimizationResultsModal({
                 </span>
               )}
               {!isSkillMatrix && <span className="inline-flex items-center gap-1 font-semibold whitespace-nowrap"
-                    style={{ color: bottleneckCount > 0 ? '#C62828' : '#1B5E20' }}>
+                    style={{ color: bottleneckCount > 0 ? '#0D9488' : '#1B5E20' }}>
                 {bottleneckCount > 0
                   ? <img src="/imagens/warning.png" alt="" style={{ width: 11, height: 11, opacity: 0.85 }} />
                   : <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>

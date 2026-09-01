@@ -124,11 +124,11 @@ export interface OptimizationResultsModalProps {
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 export const VIEW_COLOR: Record<ViewMode, string> = {
-  wsn:    '#D32F2F',
+  wsn:    '#0D9488',
   person: '#2E7D32',
 }
 export const VIEW_BG_LIGHT: Record<ViewMode, string> = {
-  wsn:    '#FFEBEE',
+  wsn:    '#F0FDFA',
   person: '#F0FDF4',
 }
 export const VIEW_LABEL: Record<ViewMode, string> = {

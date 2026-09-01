@@ -6,7 +6,7 @@ import type { ScopeKey } from '@/lib/api'
 export const SCOPE_COLOR: Record<ScopeKey, string> = {
   LEVE:   '#388E3C',
   MEDIO:  '#F57C00',
-  PESADO: '#D32F2F',
+  PESADO: '#0D9488',
   UNICO:  '#7B1FA2',
 }
 

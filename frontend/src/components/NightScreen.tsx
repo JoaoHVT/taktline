@@ -85,8 +85,8 @@ export function SleepingConsist() {
         <div style={{ width: 44, height: 20, borderRadius: 3, background: '#4B5563' }} />
         {/* Locomotive: hood + cab, brand red. */}
         <div style={{ position: 'relative', width: 62, height: 30 }}>
-          <div style={{ position: 'absolute', left: 0,  bottom: 0, width: 62, height: 20, borderRadius: 3, background: '#D32F2F' }} />
-          <div style={{ position: 'absolute', right: 4, bottom: 18, width: 26, height: 12, borderRadius: '3px 3px 0 0', background: '#B71C1C' }} />
+          <div style={{ position: 'absolute', left: 0,  bottom: 0, width: 62, height: 20, borderRadius: 3, background: '#0D9488' }} />
+          <div style={{ position: 'absolute', right: 4, bottom: 18, width: 26, height: 12, borderRadius: '3px 3px 0 0', background: '#0F766E' }} />
           {/* Headlight, dimmed — it comes up with the server, not before. */}
           <div style={{ position: 'absolute', left: 2, bottom: 8, width: 5, height: 5, borderRadius: '50%', background: '#FDE68A', opacity: 0.45 }} />
         </div>
@@ -94,7 +94,7 @@ export function SleepingConsist() {
 
       {/* Rail + the light sweeping along it. */}
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 10, height: 2, background: '#2A3040', borderRadius: 2, overflow: 'hidden' }}>
-        <div className="optv-wake-sweep" style={{ width: '35%', height: '100%', background: 'linear-gradient(90deg, transparent, #D32F2F, transparent)' }} />
+        <div className="optv-wake-sweep" style={{ width: '35%', height: '100%', background: 'linear-gradient(90deg, transparent, #0D9488, transparent)' }} />
       </div>
     </div>
   )
