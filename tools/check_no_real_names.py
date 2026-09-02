@@ -70,7 +70,13 @@ DENY_RE = [
 
 SKIP_DIRS = {".git", "node_modules", "__pycache__", ".next", "venv", "dist", "build"}
 TEXT_EXT = {".py", ".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".yml", ".yaml",
-            ".css", ".html", ".txt", ".toml", ".cfg", ".env.example"}
+            ".css", ".html", ".txt", ".toml", ".cfg"}
+# Files matched by NAME, not by extension. `.env.example` was in the list above and never
+# matched anything: Path(".env.example").suffix is ".example", so both template files were
+# skipped silently for every run — and they were the files still naming the source project's
+# database host, its identity provider and a real username. A denylist that quietly skips
+# files is worse than no denylist, because it reports zero.
+TEXT_NAMES = {".env.example", "Dockerfile", ".dockerignore", ".gitignore", ".gitattributes"}
 # This file names every forbidden term by definition.
 SELF = Path(__file__).resolve()
 
@@ -87,7 +93,9 @@ def tracked_files() -> list[Path]:
 def scan_text() -> list[str]:
     hits: list[str] = []
     for path in tracked_files():
-        if path.resolve() == SELF or path.suffix not in TEXT_EXT or not path.is_file():
+        if path.resolve() == SELF or not path.is_file():
+            continue
+        if path.suffix not in TEXT_EXT and path.name not in TEXT_NAMES:
             continue
         try:
             body = path.read_text(encoding="utf-8", errors="replace")
