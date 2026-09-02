@@ -1,0 +1,8 @@
+# Development-only dependencies. NOT installed in the image: nothing here runs in production,
+# and requirements.txt is deliberately the runtime set alone.
+#
+# httpx2 backs starlette's TestClient, which is how the route sweep exercises every endpoint
+# in-process without binding a port.
+
+-r requirements.txt
+httpx2

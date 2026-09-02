@@ -120,6 +120,9 @@ resolves each one, so a missed setup step produces a single line rather than a s
 
 For frontend work, `backend/start.py` runs the API alone alongside `npm run dev`.
 
+`backend/requirements-dev.txt` adds the test-only dependencies; the runtime set in
+`requirements.txt` is deliberately kept to what the application itself needs.
+
 ### Docker
 
 ```bash
